@@ -396,17 +396,79 @@ struct shmRegion {
   uint key, size;
   int shmid;
   int isValid; // 0 or 1
-  void *physicalAddr[SHAREDREGIONS];
+  /*
+    Maybe replace this array with single addr,
+    and manipulate w.r.t size.
+    (NEED TO THINK MORE)
+  */
+  void *physicalAddr[SHAREDREGIONS]; 
 };
 
 struct shmRegion allRegions[SHAREDREGIONS];
 
+
+/*
+  TODO:
+    1. Handle shmget w.r.t shmflag
+    2. Maybe more error checks.
+    .
+    .
+*/
 int
 shmget(uint key, uint size, int shmflag) {
+  int index = 0, notAllocated = 0;
+  // calculate no of requested pages, from entered size
+  int noOfPages = (size / PGSIZE) + 1;
+  for(int i = 0; i < SHAREDREGIONS; i++) {
+    if(allRegions[i].isValid && allRegions[i].key == key) {
+      if(allRegions[i].size != noOfPages) {
+        return -1;
+      }
+      else {
+        return allRegions[i].shmid;
+      }
+    } else {
+      // found a not shared region
+      index = i;
+      notAllocated = 1;
+      break;
+    }
+  }
+  // exhausted shared memory regions
+  if(index == 0 && notAllocated == 0) {
+    return -1;
+  }
+  if(notAllocated) {
+    // try to allocate requested size, rounded to page size
+    for(int i = 0; i < noOfPages; i++) {
+      char *newPage = kalloc();
+      if(newPage == 0){
+        cprintf("shmget: failed to allocate a page (out of memory)\n");
+        return -1;
+      }
+      memset(newPage, 0, PGSIZE);
+      allRegions[index].physicalAddr[i] = (void *)V2P(newPage);
+    }
+    // mark rest of the fields in structure
+    allRegions[index].isValid = 1;
+    allRegions[index].size = noOfPages;
+    allRegions[index].key = key;
+  }
+  int shmid = -1;
+  // get process
+  struct proc *process = myproc();
+  // search for possible shmid
+  for(int i = 0; i < SHAREDREGIONS; i++) {
+    if(process->pages[i].key == -1 && !process->pages[i].isValid) {
+      shmid = i;
+      break;
+    }
+  }
 
-  cprintf("%d\n%d\n%d\n", key, size, shmflag);
+  // store shmid in not yet shared region
+  allRegions[index].shmid = shmid;
 
-  return 0;
+  return shmid;
 }
 
 void
@@ -414,7 +476,7 @@ sharedMemoryInit(void) {
   for(int i = 0; i < SHAREDREGIONS; i++) {
     allRegions[i].key = allRegions[i].size = 0;
     allRegions[i].isValid = 0;
-    allRegions[i].shmid = 0;
+    allRegions[i].shmid = -1;
     for(int j = 0; j < SHAREDREGIONS; j++) {
       allRegions[i].physicalAddr[j] = (void *)0;
     }
