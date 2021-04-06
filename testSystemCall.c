@@ -3,7 +3,7 @@
 #include "user.h"
 
 int main(int argc, char *argv[]) {
-    printf(1, "Value returned from system call: %d\n", getvalue());
+    printf(1, "Used to test system calls. \n");
 
     exit();
 }

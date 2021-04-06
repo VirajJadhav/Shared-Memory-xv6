@@ -89,10 +89,3 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
-
-int
-sys_getvalue(void)
-{
-  uint a = 50, b = 100;
-  return a * b;
-}

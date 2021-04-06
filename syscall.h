@@ -21,4 +21,5 @@
 #define SYS_mkdir  20
 #define SYS_close  21
 
-#define SYS_getvalue 22
+// System calls for shared memory
+#define SYS_shmget 22
