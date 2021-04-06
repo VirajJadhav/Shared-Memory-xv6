@@ -224,7 +224,7 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
   char *mem;
   uint a;
 
-  if(newsz >= KERNBASE)
+  if(newsz >= HEAPLIMIT) // prev value: KERBASE
     return 0;
   if(newsz < oldsz)
     return oldsz;
@@ -257,6 +257,11 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 {
   pte_t *pte;
   uint a, pa;
+
+  // To handle max heap limit
+  if(oldsz == KERNBASE) {
+    oldsz = HEAPLIMIT;
+  }
 
   if(newsz >= oldsz)
     return oldsz;
@@ -386,6 +391,14 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 }
 
 // Shared memory
+
+struct shmRegion {
+  uint key, size;
+  int isValid; // 0 or 1
+  void *physicalAddr[SHAREDREGIONS];
+};
+
+struct shmRegion allRegions[SHAREDREGIONS];
 
 int
 sys_shmget(uint key, uint size, int shmflag) {
