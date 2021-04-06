@@ -112,6 +112,12 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
+  // Initialise shared pages
+  for(int i = 0; i < SHAREDREGIONS; i++) {
+    p->pages[i].key = -1;
+    p->pages[i].isValid = 0;
+  }
+
   return p;
 }
 

@@ -89,3 +89,20 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+// Shared memory
+
+extern int shmget(uint, uint, int);
+
+int
+sys_shmget(void)
+{
+  int key, size, shmflag;
+  if(argint(0, &key) < 0)
+    return -1;
+  if(argint(1, &size) < 0)
+    return -1;
+  if(argint(2, &shmflag) < 0)
+    return -1;
+  return shmget((uint)key, (uint)size, shmflag);
+}

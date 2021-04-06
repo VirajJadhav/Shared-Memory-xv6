@@ -401,8 +401,22 @@ struct shmRegion {
 struct shmRegion allRegions[SHAREDREGIONS];
 
 int
-sys_shmget(uint key, uint size, int shmflag) {
+shmget(uint key, uint size, int shmflag) {
+
+  cprintf("%d\n%d\n%d\n", key, size, shmflag);
+
   return 0;
+}
+
+void
+sharedMemoryInit(void) {
+  for(int i = 0; i < SHAREDREGIONS; i++) {
+    allRegions[i].key = allRegions[i].size = 0;
+    allRegions[i].isValid = 0;
+    for(int j = 0; j < SHAREDREGIONS; j++) {
+      allRegions[i].physicalAddr[j] = (void *)0;
+    }
+  }
 }
 
 //PAGEBREAK!
