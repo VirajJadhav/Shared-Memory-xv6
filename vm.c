@@ -394,6 +394,7 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 
 struct shmRegion {
   uint key, size;
+  int shmid;
   int isValid; // 0 or 1
   void *physicalAddr[SHAREDREGIONS];
 };
@@ -413,6 +414,7 @@ sharedMemoryInit(void) {
   for(int i = 0; i < SHAREDREGIONS; i++) {
     allRegions[i].key = allRegions[i].size = 0;
     allRegions[i].isValid = 0;
+    allRegions[i].shmid = 0;
     for(int j = 0; j < SHAREDREGIONS; j++) {
       allRegions[i].physicalAddr[j] = (void *)0;
     }

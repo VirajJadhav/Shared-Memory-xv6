@@ -9,7 +9,7 @@
 #define KERNLINK (KERNBASE+EXTMEM)  // Address where kernel is linked
 
 // Shared memory macros
-#define HEAPLIMIT 0x7FFC17FF // 256K from this limit -> KERNBASE
+#define HEAPLIMIT 0x7F000000 // 256K from this limit -> KERNBASE
 #define SHAREDREGIONS 64
 
 #define V2P(a) (((uint) (a)) - KERNBASE)
