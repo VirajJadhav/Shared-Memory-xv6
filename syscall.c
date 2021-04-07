@@ -106,6 +106,7 @@ extern int sys_uptime(void);
 
 // Declarations for shared memory
 extern int sys_shmget(void);
+extern int sys_shmat(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -131,6 +132,7 @@ static int (*syscalls[])(void) = {
 [SYS_close]   sys_close,
 
 [SYS_shmget]  sys_shmget,
+[SYS_shmat]  sys_shmat,
 };
 
 void

@@ -23,3 +23,4 @@
 
 // System calls for shared memory
 #define SYS_shmget 22
+#define SYS_shmat  23

@@ -106,3 +106,19 @@ sys_shmget(void)
     return -1;
   return shmget((uint)key, (uint)size, shmflag);
 }
+
+extern void * shmat(int, void*, int);
+
+void*
+sys_shmat(void)
+{
+  int shmid, shmflag;
+  int i;
+  if(argint(0, &shmid) < 0)
+    return (void*)0;
+  if(argint(1,&i)<0)
+    return (void*)0;
+  if(argint(2, &shmflag) < 0)
+    return (void*)0;
+  return shmat(shmid, (void*)i, shmflag);
+}

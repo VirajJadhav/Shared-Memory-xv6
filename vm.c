@@ -414,6 +414,7 @@ struct shmRegion allRegions[SHAREDREGIONS];
     .
     .
 */
+
 int
 shmget(uint key, uint size, int shmflag) {
   int index = 0, notAllocated = 0;
@@ -471,6 +472,60 @@ shmget(uint key, uint size, int shmflag) {
   return shmid;
 }
 
+
+/*
+  TODO:
+    1. Handle shmat w.r.t shmaddr and SHMRND flag
+    2. Many More error checks.
+    3. 
+    .
+*/
+void*
+shmat(int shmid, void* shmaddr, int shmflag)
+{
+  int index = -1;
+  if(shmid < 0 || shmid > 64)
+  {
+    return (void*)0;
+  }
+  for(int i = 0; i < SHAREDREGIONS; i++) 
+  {
+    if(allRegions[i].shmid == shmid && allRegions[i].isValid)
+    {
+      index = i;
+      break;
+    }  
+  }
+  if(index == -1)
+  {
+    return (void*)0;
+  }
+  struct proc *process = myproc();
+  void *va = (void*)HEAPLIMIT;
+  for(int i = 0; i < SHAREDREGIONS; i++)
+  {
+    if(process->pages[i].key != -1 && (uint)process->pages[i].virtualAddr > (uint)va)
+    {
+      va = process->pages[i].virtualAddr;
+    }
+  }
+  va = (void*)va + 64*PGSIZE;
+  if((uint)va > KERNBASE)
+  {
+    return (void*)0;
+  }
+  for (int k = 0; k < allRegions[index].size; k++) {
+		mappages(process->pgdir, (void*)((uint)va + (k*PGSIZE)), PGSIZE, (uint)allRegions[index].physicalAddr[k], PTE_W | PTE_U);
+	}
+  if(!process->pages[shmid].isValid) 
+  {
+  process->pages[shmid].isValid = 1;
+  process->pages[shmid].shmid = shmid;  
+  process->pages[shmid].virtualAddr = va;
+  process->pages[shmid].key = allRegions[index].key;
+  }
+  return va;
+}
 void
 sharedMemoryInit(void) {
   for(int i = 0; i < SHAREDREGIONS; i++) {
