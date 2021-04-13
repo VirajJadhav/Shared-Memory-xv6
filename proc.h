@@ -40,7 +40,6 @@ enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 typedef struct sharedPages {
   uint key;
   int shmid;
-  int isValid;
   void *virtualAddr;
 } sharedPages;
 

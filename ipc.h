@@ -1,0 +1,4 @@
+#define IPC_CREAT 01000
+#define IPC_EXCL 02000
+
+#define IPC_PRIVATE 0
