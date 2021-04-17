@@ -116,6 +116,7 @@ found:
   for(int i = 0; i < SHAREDREGIONS; i++) {
     p->pages[i].key = -1;
     p->pages[i].shmid = -1;
+    p->pages[i].size  = 0;
   }
 
   return p;

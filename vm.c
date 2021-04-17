@@ -7,6 +7,7 @@
 #include "proc.h"
 #include "elf.h"
 
+#include "shm.h"
 #include "ipc.h"
 
 extern char data[];  // defined by kernel.ld
@@ -481,21 +482,73 @@ shmget(uint key, uint size, int shmflag) {
   }  
 }
 
+int getLeastvaidx(void*curr_va, struct proc *process)
+{
+  void* leastva = (void*)(KERNBASE - 1);
+  int idx = -1;
+  for(int i = 0; i < SHAREDREGIONS; i++) {
+    if(process->pages[i].key != -1 && (uint)process->pages[i].virtualAddr >= (uint)curr_va && (uint)leastva >= (uint)process->pages[i].virtualAddr) {
+      
+      leastva = process->pages[i].virtualAddr;
+      idx = i;
+      
+    }
+  }
+  
+  return idx;
+}
+
+int shmdt(void* shmaddr)
+{
+  struct proc *process = myproc();
+  void* va = (void*)0;
+  uint size;
+  for(int i = 0; i < SHAREDREGIONS; i++) {
+    if(process->pages[i].key != -1 && process->pages[i].virtualAddr == shmaddr) {
+        //cprintf("%x\n",(uint)shmaddr);
+        va =  process->pages[i].virtualAddr;
+        size = process->pages[i].size;
+        process->pages[i].shmid = -1;  
+        process->pages[i].key = -1;
+        process->pages[i].size =  0;
+        break;
+    }
+  }
+  if(va)
+  {
+    for(int i = 0; i < size; i++)
+    {
+      pte_t* pte = walkpgdir(process->pgdir, (void*)((uint)va + i*PGSIZE), 0);
+      if(pte == 0) {
+        return -1;
+      }
+		  *pte = 0;
+    }
+    return 0;
+  }
+  else
+    return -1;
+  
+}
+  
 
 /*
   TODO:
-    1. Handle shmat w.r.t shmaddr and SHMRND flag
-    2. Many More error checks.
-    3. 
-    .
+    1. Some More error checks.
+    2. Error check for request with more than 64 pages?
+    3. Handle R, W, X Permissions
+    4. Update access times in ds
 */
 void*
 shmat(int shmid, void* shmaddr, int shmflag)
 {
-  int index = -1;
+  int index = -1,idx;
+  uint segment,size = 0;
+  void *va = (void*)HEAPLIMIT, *least_va;
+  struct proc *process = myproc();
   if(shmid < 0 || shmid > 64)
   {
-    return (void*)0;
+    return (void*)-1;
   }
   for(int i = 0; i < SHAREDREGIONS; i++) 
   {
@@ -507,22 +560,83 @@ shmat(int shmid, void* shmaddr, int shmflag)
   }
   if(index == -1)
   {
+    // shmid not found
     return (void*)0;
   }
-  struct proc *process = myproc();
-  void *va = (void*)HEAPLIMIT;
-  for(int i = 0; i < SHAREDREGIONS; i++)
+  if(shmaddr)
   {
-    if(process->pages[i].key != -1 && (uint)process->pages[i].virtualAddr > (uint)va)
+      uint rounded = ((uint)shmaddr & ~(SHMLBA-1));  // round down to nearest multiple of shmlba 
+      if(shmflag & SHM_RND)
+      {
+        if(!rounded)
+        {
+          return (void*)-1;
+        }
+        va = (void*)rounded;
+      }
+      else
+      {
+        if(rounded == (uint)shmaddr) // page aligned address
+        {
+          va = shmaddr;
+        }
+      }
+  }
+  else
+  {    
+    for(int i = 0; i < SHAREDREGIONS; i++)
     {
-      va = process->pages[i].virtualAddr;
+      idx = getLeastvaidx(va,process);
+      if(idx != -1)
+      {
+        least_va = process->pages[idx].virtualAddr;
+        if((uint)va + allRegions[index].size*PGSIZE < (uint)least_va)        
+          break;
+        else
+          va = (void*)((uint)least_va + process->pages[idx].size*PGSIZE);
+      }
+      else 
+        break;
+
     }
   }
-  va = (void*)va + 64*PGSIZE;
-  if((uint)va > KERNBASE)
+  if((uint)va + allRegions[index].size*PGSIZE >= KERNBASE)
   {
+    // size exceeded
     return (void*)0;
   }
+  idx = -1;
+  for(int i = 0; i < SHAREDREGIONS; i++) {
+      if(process->pages[i].key != -1 && (uint)process->pages[i].virtualAddr + process->pages[i].size*PGSIZE > (uint)va && (uint)va >= (uint)process->pages[i].virtualAddr)  {
+        idx = i;
+        break;
+      }
+  }
+  if (idx != -1)
+  {
+    if(shmflag & SHM_REMAP)
+    {
+      segment = (uint)process->pages[idx].virtualAddr;
+      while(segment <= (uint)va + allRegions[index].size*PGSIZE)
+      { 
+        size = process->pages[idx].size;
+        if(shmdt((void*)segment) == -1)
+        {
+          return (void*)-1;
+        }
+        idx = getLeastvaidx((void*)(segment + size*PGSIZE),process);
+        if(idx == -1)
+          break;
+        segment = (uint)process->pages[idx].virtualAddr;
+      }
+    }
+    else
+    {
+      return (void*)-1;
+    }
+
+  }
+  //cprintf("%x",(uint)va);
   for (int k = 0; k < allRegions[index].size; k++) {
 		mappages(process->pgdir, (void*)((uint)va + (k*PGSIZE)), PGSIZE, (uint)allRegions[index].physicalAddr[k], PTE_W | PTE_U);
 	}
@@ -530,6 +644,7 @@ shmat(int shmid, void* shmaddr, int shmflag)
     process->pages[shmid].shmid = shmid;  
     process->pages[shmid].virtualAddr = va;
     process->pages[shmid].key = allRegions[index].key;
+    process->pages[shmid].size =  allRegions[index].size;
   }
   return va;
 }

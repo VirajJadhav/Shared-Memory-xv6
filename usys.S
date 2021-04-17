@@ -32,3 +32,4 @@ SYSCALL(uptime)
 
 SYSCALL(shmget)
 SYSCALL(shmat)
+SYSCALL(shmdt)

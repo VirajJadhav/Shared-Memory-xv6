@@ -107,7 +107,18 @@ sys_shmget(void)
   return shmget((uint)key, (uint)size, shmflag);
 }
 
+extern int shmdt(void*);
+
+int sys_shmdt(void)
+{
+  int i;
+  if(argint(0,&i)<0)
+    return 0;
+  return shmdt((void*)i);
+}
+
 extern void * shmat(int, void*, int);
+
 
 void*
 sys_shmat(void)
