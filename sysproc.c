@@ -133,3 +133,18 @@ sys_shmat(void)
     return (void*)0;
   return shmat(shmid, (void*)i, shmflag);
 }
+
+extern int shmctl(int, int, void*);
+
+int
+sys_shmctl(void)
+{
+  int shmid, cmd, buf;
+  if(argint(0, &shmid) < 0)
+    return -1;
+  if(argint(1, &cmd) < 0)
+    return -1;
+  if(argint(2, &buf) < 0)
+    return -1;
+  return shmctl(shmid, cmd, (void*)buf);
+}

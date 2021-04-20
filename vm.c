@@ -641,6 +641,11 @@ shmat(int shmid, void* shmaddr, int shmflag)
   return va;
 }
 
+int
+shmctl(int shmid, int cmd, void *buf) {
+  return 0;
+}
+
 void
 sharedMemoryInit(void) {
   for(int i = 0; i < SHAREDREGIONS; i++) {
