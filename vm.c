@@ -463,16 +463,8 @@ shmget(uint key, uint size, int shmflag) {
     allRegions[index].size = noOfPages;
     allRegions[index].key = key;
 
-    int shmid = -1;
-    // get process
-    struct proc *process = myproc();
-    // search for possible shmid
-    for(int i = 0; i < SHAREDREGIONS; i++) {
-      if(process->pages[i].key == -1) {
-        shmid = i;
-        break;
-      }
-    }
+    int shmid = index;
+    
     // store shmid in not yet shared region
     allRegions[index].shmid = shmid;
 
