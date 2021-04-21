@@ -4,3 +4,8 @@
 #define	SHM_EXEC	0100000	/* execution access */
 
 #define	SHMLBA	(1 * PGSIZE)
+
+struct shmid_ds {
+  uint shm_segsz; // size of segment in bytes
+  int shm_nattch; // current attaches
+};

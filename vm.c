@@ -399,17 +399,14 @@ struct shmRegion {
   uint key, size;
   int shmid;
   void *physicalAddr[SHAREDREGIONS]; 
+  /*
+    need to modify this field in other system calls,
+    especially shmat, init, etc
+  */
+  struct shmid_ds buffer;
 };
 
 struct shmRegion allRegions[SHAREDREGIONS];
-
-
-/*
-  TODO:
-    1. Maybe more error checks.
-    2. Figure out more scenarios (read resources)
-    .
-*/
 
 int
 shmget(uint key, uint size, int shmflag) {
@@ -431,9 +428,6 @@ shmget(uint key, uint size, int shmflag) {
       if(shmflag == IPC_CREAT) {
         return allRegions[i].shmid;
       }
-      /*
-        Need to think of more cases, if present
-      */
       return -1;
     }
   }
@@ -462,6 +456,8 @@ shmget(uint key, uint size, int shmflag) {
     // mark rest of the fields in structure
     allRegions[index].size = noOfPages;
     allRegions[index].key = key;
+
+    allRegions[index].buffer.shm_segsz = noOfPages * PGSIZE;
 
     int shmid = index;
     
@@ -523,7 +519,6 @@ int shmdt(void* shmaddr)
   
 }
   
-
 /*
   TODO:
     1. Some More error checks.
@@ -641,9 +636,61 @@ shmat(int shmid, void* shmaddr, int shmflag)
   return va;
 }
 
+/*
+  TODO:
+    1. Handle cmd
+    2. Error checks
+*/
 int
 shmctl(int shmid, int cmd, void *buf) {
-  return 0;
+  if(shmid < 0 || shmid > 64){
+    return -1;
+  }
+
+  int index = -1;
+  /*
+    can be changed to direct access instead of liner (i.e. shmid == index)
+  */
+  for(int i = 0; i < SHAREDREGIONS; i++) {
+    if(allRegions[i].shmid == shmid && allRegions[i].key != -1) {
+      index = i;
+    }
+  }
+  if(index == -1) {
+    return -1;
+  } else {
+    switch(cmd) {
+      case IPC_STAT:
+        struct shmid_ds *buffer = (struct shmid_ds *)buf;
+        if(buffer) {
+          buffer->shm_nattch = allRegions[index].buffer.shm_nattch;
+          buffer->shm_segsz = allRegions[index].buffer.shm_segsz;
+          return 0;
+        } else {
+          return -1;
+        }
+        break;
+      case IPC_RMID:
+        if(allRegions[index].buffer.shm_nattch == 0) {
+          for(int i = 0; i < allRegions[index].size; i++) {
+            char *addr = (char *)P2V(allRegions[index].physicalAddr[i]);
+            kfree(addr);
+            allRegions[index].physicalAddr[i] = (void *)0;
+          }
+          allRegions[index].size = 0;
+          allRegions[index].key = allRegions[index].shmid = -1;
+          allRegions[index].buffer.shm_nattch = 0;
+          allRegions[index].buffer.shm_segsz = 0;
+          return 0;
+        } else {
+          return -1;
+        }
+        break;
+      default:
+        return -1;
+        break;
+    }
+  } 
 }
 
 void
@@ -651,6 +698,8 @@ sharedMemoryInit(void) {
   for(int i = 0; i < SHAREDREGIONS; i++) {
     allRegions[i].key = allRegions[i].shmid = -1;
     allRegions[i].size = 0;
+    allRegions[i].buffer.shm_nattch = 0;
+    allRegions[i].buffer.shm_segsz = 0;
     for(int j = 0; j < SHAREDREGIONS; j++) {
       allRegions[i].physicalAddr[j] = (void *)0;
     }
