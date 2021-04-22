@@ -647,21 +647,23 @@ shmctl(int shmid, int cmd, void *buf) {
     return -1;
   }
 
+  struct shmid_ds *buffer = (struct shmid_ds *)buf;
+
   int index = -1;
   /*
     can be changed to direct access instead of liner (i.e. shmid == index)
   */
   for(int i = 0; i < SHAREDREGIONS; i++) {
-    if(allRegions[i].shmid == shmid && allRegions[i].key != -1) {
+    if(allRegions[i].shmid == shmid) {
       index = i;
+      break;
     }
   }
   if(index == -1) {
     return -1;
   } else {
     switch(cmd) {
-      case IPC_STAT:
-        struct shmid_ds *buffer = (struct shmid_ds *)buf;
+      case IPC_STAT:      
         if(buffer) {
           buffer->shm_nattch = allRegions[index].buffer.shm_nattch;
           buffer->shm_segsz = allRegions[index].buffer.shm_segsz;
