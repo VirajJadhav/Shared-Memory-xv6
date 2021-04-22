@@ -117,6 +117,7 @@ found:
     p->pages[i].key = -1;
     p->pages[i].shmid = -1;
     p->pages[i].size  = 0;
+    p->pages[i].virtualAddr = (void *)0;
   }
 
   return p;
@@ -218,6 +219,11 @@ fork(void)
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
   pid = np->pid;
+
+  // copy shared pages values from parent to child
+  for(int i = 0; i < SHAREDREGIONS; i++) {
+    np->pages[i] = curproc->pages[i];
+  }
 
   acquire(&ptable.lock);
 
