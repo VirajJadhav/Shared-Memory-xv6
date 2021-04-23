@@ -261,11 +261,6 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
   pte_t *pte;
   uint a, pa;
 
-  // To handle max heap limit
-  if(oldsz == KERNBASE) {
-    oldsz = HEAPLIMIT;
-  }
-
   if(newsz >= oldsz)
     return oldsz;
 
@@ -553,7 +548,7 @@ shmat(int shmid, void* shmaddr, int shmflag)
   if(index == -1)
   {
     // shmid not found
-    return (void*)0;
+    return (void*)-1;
   }
   if(shmaddr)
   {
