@@ -491,18 +491,18 @@ int shmdt(void* shmaddr)
   struct proc *process = myproc();
   void* va = (void*)0;
   uint size;
+  int index,shmid;
   for(int i = 0; i < SHAREDREGIONS; i++) {
     if(process->pages[i].key != -1 && process->pages[i].virtualAddr == shmaddr) {
         //cprintf("%x\n",(uint)shmaddr);
         va =  process->pages[i].virtualAddr;
-        size = process->pages[i].size;
-        process->pages[i].shmid = -1;  
-        process->pages[i].key = -1;
-        process->pages[i].size =  0;
+        index = i;
+        shmid = process->pages[i].shmid;
+        size = process->pages[index].size;
         break;
     }
   }
-  if(va)
+  if(va && allRegions[shmid].buffer.shm_nattch > 0)
   {
     for(int i = 0; i < size; i++)
     {
@@ -512,6 +512,11 @@ int shmdt(void* shmaddr)
       }
 		  *pte = 0;
     }
+    process->pages[index].shmid = -1;  
+    process->pages[index].key = -1;
+    process->pages[index].size =  0;
+    process->pages[index].virtualAddr = (void*)0;
+    allRegions[shmid].buffer.shm_nattch -= 1;
     return 0;
   }
   else
@@ -521,7 +526,7 @@ int shmdt(void* shmaddr)
   
 /*
   TODO:
-    1. Some More error checks.
+    1. Some more error checks.
     2. Error check for request with more than 64 pages?
     3. Handle R, W, X Permissions
     4. Update access times in ds
@@ -590,7 +595,7 @@ shmat(int shmid, void* shmaddr, int shmflag)
   if((uint)va + allRegions[index].size*PGSIZE >= KERNBASE)
   {
     // size exceeded
-    return (void*)0;
+    return (void*)-1;
   }
   idx = -1;
   for(int i = 0; i < SHAREDREGIONS; i++) {
@@ -625,13 +630,18 @@ shmat(int shmid, void* shmaddr, int shmflag)
   }
   //cprintf("%x",(uint)va);
   for (int k = 0; k < allRegions[index].size; k++) {
-		mappages(process->pgdir, (void*)((uint)va + (k*PGSIZE)), PGSIZE, (uint)allRegions[index].physicalAddr[k], PTE_W | PTE_U);
+		if(mappages(process->pgdir, (void*)((uint)va + (k*PGSIZE)), PGSIZE, (uint)allRegions[index].physicalAddr[k], PTE_W | PTE_U) < 0)
+    {
+      deallocuvm(process->pgdir,(uint)va,(uint)(va + allRegions[index].size));
+      return (void*)-1;
+    }
 	}
   if(process->pages[shmid].key != allRegions[index].key) {
     process->pages[shmid].shmid = shmid;  
     process->pages[shmid].virtualAddr = va;
     process->pages[shmid].key = allRegions[index].key;
     process->pages[shmid].size =  allRegions[index].size;
+    allRegions[index].buffer.shm_nattch += 1;
   }
   return va;
 }
