@@ -22,11 +22,26 @@ int main(int argc, char *argv[]) {
 
     printf(1, "Read: %s\n", ptr);
 
+    
+
     int dt = shmdt(ptr);
     if(dt < 0) {
         printf(1, "shmdt fail\n");
         exit();
     }
+    // char *ptr2 = (char *)shmat(shmid, (void *)0, 0);
+
+    // if(!ptr2) {
+    //     printf(1, "shmat fail\n");
+    //     exit();
+    // }
+
+    // printf(1, "Read: %s\n", ptr2);
+    // int dt2 = shmdt(ptr2);
+    // if(dt2 < 0) {
+    //     printf(1, "shmdt fail\n");
+    //     exit();
+    // }
     struct shmid_ds buffer;
     int ctl = shmctl(shmid, IPC_STAT, &buffer);
     // int ctl = shmctl(shmid, IPC_RMID, &buffer);

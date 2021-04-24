@@ -631,12 +631,24 @@ shmat(int shmid, void* shmaddr, int shmflag)
       return (void*)-1;
     }
 	}
-  if(process->pages[shmid].key != allRegions[index].key) {
-    process->pages[shmid].shmid = shmid;  
-    process->pages[shmid].virtualAddr = va;
-    process->pages[shmid].key = allRegions[index].key;
-    process->pages[shmid].size =  allRegions[index].size;
+  idx = -1;
+  for(int i = 0; i < SHAREDREGIONS; i++)
+  {
+    if(process->pages[i].key == -1)
+    {
+      idx = i;
+      break;
+    }
+  }
+  if(idx != -1) {
+    process->pages[idx].shmid = shmid;  
+    process->pages[idx].virtualAddr = va;
+    process->pages[idx].key = allRegions[index].key;
+    process->pages[idx].size =  allRegions[index].size;
     allRegions[index].buffer.shm_nattch += 1;
+  }
+  else {
+    return (void*)-1; // all page regions exhausted
   }
   return va;
 }
