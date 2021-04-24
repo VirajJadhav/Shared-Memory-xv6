@@ -5,7 +5,12 @@
 
 #define	SHMLBA	(1 * PGSIZE)
 
+struct ipc_perm {
+  uint key;
+};
+
 struct shmid_ds {
+  struct ipc_perm shm_perm;
   uint shm_segsz; // size of segment in bytes
   int shm_nattch; // current attaches
 };

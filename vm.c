@@ -393,11 +393,7 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 struct shmRegion {
   uint key, size;
   int shmid;
-  void *physicalAddr[SHAREDREGIONS]; 
-  /*
-    need to modify this field in other system calls,
-    especially shmat, init, etc
-  */
+  void *physicalAddr[SHAREDREGIONS];
   struct shmid_ds buffer;
 };
 
@@ -452,7 +448,9 @@ shmget(uint key, uint size, int shmflag) {
     allRegions[index].size = noOfPages;
     allRegions[index].key = key;
 
-    allRegions[index].buffer.shm_segsz = noOfPages * PGSIZE;
+    // allRegions[index].buffer.shm_segsz = noOfPages * PGSIZE;
+    allRegions[index].buffer.shm_segsz = size;
+    allRegions[index].buffer.shm_perm.key = key;
 
     int shmid = index;
     
@@ -684,6 +682,7 @@ shmctl(int shmid, int cmd, void *buf) {
         if(buffer) {
           buffer->shm_nattch = allRegions[index].buffer.shm_nattch;
           buffer->shm_segsz = allRegions[index].buffer.shm_segsz;
+          buffer->shm_perm.key = allRegions[index].buffer.shm_perm.key;
           return 0;
         } else {
           return -1;
@@ -700,6 +699,7 @@ shmctl(int shmid, int cmd, void *buf) {
           allRegions[index].key = allRegions[index].shmid = -1;
           allRegions[index].buffer.shm_nattch = 0;
           allRegions[index].buffer.shm_segsz = 0;
+          allRegions[index].buffer.shm_perm.key = -1;
           return 0;
         } else {
           return -1;
@@ -719,6 +719,7 @@ sharedMemoryInit(void) {
     allRegions[i].size = 0;
     allRegions[i].buffer.shm_nattch = 0;
     allRegions[i].buffer.shm_segsz = 0;
+    allRegions[i].buffer.shm_perm.key = -1;
     for(int j = 0; j < SHAREDREGIONS; j++) {
       allRegions[i].physicalAddr[j] = (void *)0;
     }
