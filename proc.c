@@ -261,6 +261,12 @@ exit(void)
     }
   }
 
+  for(int i = 0; i < SHAREDREGIONS; i++) {
+    if(curproc->pages[i].shmid != -1 && curproc->pages[i].key != -1) {
+      shmdtWrapper(curproc->pages[i].virtualAddr);
+    }
+  }
+
   begin_op();
   iput(curproc->cwd);
   end_op();

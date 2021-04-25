@@ -752,6 +752,10 @@ void mappagesWrapper(struct proc *process, int shmIndex, int index) {
   }
 }
 
+void shmdtWrapper(void *addr) {
+  shmdt(addr);
+}
+
 //PAGEBREAK!
 // Blank page.
 //PAGEBREAK!
