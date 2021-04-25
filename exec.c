@@ -93,6 +93,12 @@ exec(char *path, char **argv)
       last = s+1;
   safestrcpy(curproc->name, last, sizeof(curproc->name));
 
+  for(int i = 0; i < SHAREDREGIONS; i++) {
+    if(curproc->pages[i].shmid != -1 && curproc->pages[i].key != -1) {
+      shmdtWrapper(curproc->pages[i].virtualAddr);
+    }
+  }
+
   // Commit to the user image.
   oldpgdir = curproc->pgdir;
   curproc->pgdir = pgdir;
