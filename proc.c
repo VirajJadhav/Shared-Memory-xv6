@@ -221,13 +221,13 @@ fork(void)
   pid = np->pid;
 
   // copy shared pages values from parent to child
-  /*
-    TODO:
-      1. Check if mapping is also needed here or not.
-  */
   for(int i = 0; i < SHAREDREGIONS; i++) {
     if(curproc->pages[i].key != -1 && curproc->pages[i].shmid != -1) {
       np->pages[i] = curproc->pages[i];
+      int index = getShmidIndex(np->pages[i].shmid);
+      if(index != -1) {
+        mappagesWrapper(np, index, i);
+      }
     }
   }
 

@@ -188,6 +188,8 @@ void            clearpteu(pde_t *pgdir, char *uva);
 
 // Shared memory (vm.c)
 void sharedMemoryInit(void);
+int getShmidIndex(int);
+void mappagesWrapper(struct proc *process, int, int);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

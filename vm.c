@@ -290,10 +290,15 @@ freevm(pde_t *pgdir)
 
   if(pgdir == 0)
     panic("freevm: no pgdir");
-  deallocuvm(pgdir, KERNBASE, 0);
+  // deallocuvm(pgdir, KERNBASE, 0);
+  deallocuvm(pgdir, HEAPLIMIT, 0);
   for(i = 0; i < NPDENTRIES; i++){
     if(pgdir[i] & PTE_P){
       char * v = P2V(PTE_ADDR(pgdir[i]));
+      /*
+        TODO:
+          1. verify if a check for shared pages is necessary
+      */
       kfree(v);
     }
   }
@@ -722,6 +727,27 @@ sharedMemoryInit(void) {
     allRegions[i].buffer.shm_perm.key = -1;
     for(int j = 0; j < SHAREDREGIONS; j++) {
       allRegions[i].physicalAddr[j] = (void *)0;
+    }
+  }
+}
+
+int
+getShmidIndex(int shmid) {
+  int index = -1;
+  for(int i = 0; i < SHAREDREGIONS; i++) {
+    if(allRegions[i].shmid == shmid) {
+      index = i;
+    }
+  }
+  return index;
+}
+
+void mappagesWrapper(struct proc *process, int shmIndex, int index) {
+  for(int i = 0; i < process->pages[index].size; i++) {
+    uint va = (uint)process->pages[index].virtualAddr;
+    if(mappages(process->pgdir, (void*)(va + (i * PGSIZE)), PGSIZE, (uint)allRegions[shmIndex].physicalAddr[i], PTE_W | PTE_U) < 0) {
+      deallocuvm(process->pgdir, va, (uint)(va + allRegions[shmIndex].size));
+      return;
     }
   }
 }
