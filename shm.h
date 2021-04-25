@@ -3,14 +3,24 @@
 #define	SHM_REMAP	040000	/* take-over region on attach */
 #define	SHM_EXEC	0100000	/* execution access */
 
+// flag for shmctl
+#define SHM_STAT 13
+
 #define	SHMLBA	(1 * PGSIZE)
 
+// read, write
+#define READ_SHM 04
+#define RW_SHM 06
+
 struct ipc_perm {
-  uint key;
+  uint __key; // key supplied to shmget
+  int mode; // READ - WRITE permissions. READ_SHM / RW_SHM
+  // mode = 0, while init, i.e. no permissions set
 };
 
 struct shmid_ds {
   struct ipc_perm shm_perm;
   uint shm_segsz; // size of segment in bytes
   int shm_nattch; // current attaches
+  int shm_cpid;
 };

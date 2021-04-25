@@ -295,10 +295,6 @@ freevm(pde_t *pgdir)
   for(i = 0; i < NPDENTRIES; i++){
     if(pgdir[i] & PTE_P){
       char * v = P2V(PTE_ADDR(pgdir[i]));
-      /*
-        TODO:
-          1. verify if a check for shared pages is necessary
-      */
       kfree(v);
     }
   }
@@ -406,6 +402,20 @@ struct shmRegion allRegions[SHAREDREGIONS];
 
 int
 shmget(uint key, uint size, int shmflag) {
+  // as Xv6 has only single user, else lower 9 bits would be considered
+  int lowerBits = shmflag & 7, permission = -1;
+  
+  if(lowerBits == (int)READ_SHM) {
+    permission = READ_SHM;
+    shmflag ^= READ_SHM;
+  }
+  else if(lowerBits == (int)RW_SHM) {
+    permission = RW_SHM;
+    shmflag ^= RW_SHM;
+  } else {
+    return -1;
+  }
+  
   int index = -1;
   // calculate no of requested pages, from entered size
   int noOfPages = (size / PGSIZE) + 1;
@@ -418,11 +428,14 @@ shmget(uint key, uint size, int shmflag) {
       if(shmflag == (IPC_CREAT | IPC_EXCL)) {
         return -1;
       }
-      if((shmflag == 0) && (key != IPC_PRIVATE)) {
-        return allRegions[i].shmid;
-      }
-      if(shmflag == IPC_CREAT) {
-        return allRegions[i].shmid;
+      int checkPerm = allRegions[i].buffer.shm_perm.mode;
+      if(checkPerm == READ_SHM || checkPerm == RW_SHM) {
+        if((shmflag == 0) && (key != IPC_PRIVATE)) {
+          return allRegions[i].shmid;
+        }
+        if(shmflag == IPC_CREAT) {
+          return allRegions[i].shmid;
+        }
       }
       return -1;
     }
@@ -453,9 +466,12 @@ shmget(uint key, uint size, int shmflag) {
     allRegions[index].size = noOfPages;
     allRegions[index].key = key;
 
-    // allRegions[index].buffer.shm_segsz = noOfPages * PGSIZE;
     allRegions[index].buffer.shm_segsz = size;
-    allRegions[index].buffer.shm_perm.key = key;
+    allRegions[index].buffer.shm_perm.__key = key;
+    allRegions[index].buffer.shm_perm.mode = permission;
+
+    // store creator pid
+    allRegions[index].buffer.shm_cpid = myproc()->pid;
 
     int shmid = index;
     
@@ -500,7 +516,7 @@ int shmdt(void* shmaddr)
         break;
     }
   }
-  if(va && allRegions[shmid].buffer.shm_nattch > 0)
+  if(va)
   {
     for(int i = 0; i < size; i++)
     {
@@ -514,7 +530,9 @@ int shmdt(void* shmaddr)
     process->pages[index].key = -1;
     process->pages[index].size =  0;
     process->pages[index].virtualAddr = (void*)0;
-    allRegions[shmid].buffer.shm_nattch -= 1;
+    if(allRegions[shmid].buffer.shm_nattch > 0) {
+      allRegions[shmid].buffer.shm_nattch -= 1;
+    }
     return 0;
   }
   else
@@ -682,12 +700,16 @@ shmctl(int shmid, int cmd, void *buf) {
   if(index == -1) {
     return -1;
   } else {
+    int checkPerm = allRegions[index].buffer.shm_perm.mode;
     switch(cmd) {
-      case IPC_STAT:      
-        if(buffer) {
+      case SHM_STAT:
+      case IPC_STAT:
+        if(buffer && (checkPerm == READ_SHM || checkPerm == RW_SHM)) {
           buffer->shm_nattch = allRegions[index].buffer.shm_nattch;
           buffer->shm_segsz = allRegions[index].buffer.shm_segsz;
-          buffer->shm_perm.key = allRegions[index].buffer.shm_perm.key;
+          buffer->shm_perm.__key = allRegions[index].buffer.shm_perm.__key;
+          buffer->shm_perm.mode = checkPerm;
+          buffer->shm_cpid = allRegions[index].buffer.shm_cpid;
           return 0;
         } else {
           return -1;
@@ -704,7 +726,9 @@ shmctl(int shmid, int cmd, void *buf) {
           allRegions[index].key = allRegions[index].shmid = -1;
           allRegions[index].buffer.shm_nattch = 0;
           allRegions[index].buffer.shm_segsz = 0;
-          allRegions[index].buffer.shm_perm.key = -1;
+          allRegions[index].buffer.shm_perm.__key = -1;
+          allRegions[index].buffer.shm_perm.mode = 0;
+          allRegions[index].buffer.shm_cpid = -1;
           return 0;
         } else {
           return -1;
@@ -724,7 +748,9 @@ sharedMemoryInit(void) {
     allRegions[i].size = 0;
     allRegions[i].buffer.shm_nattch = 0;
     allRegions[i].buffer.shm_segsz = 0;
-    allRegions[i].buffer.shm_perm.key = -1;
+    allRegions[i].buffer.shm_perm.__key = -1;
+    allRegions[i].buffer.shm_perm.mode = 0;
+    allRegions[i].buffer.shm_cpid = -1;
     for(int j = 0; j < SHAREDREGIONS; j++) {
       allRegions[i].physicalAddr[j] = (void *)0;
     }
