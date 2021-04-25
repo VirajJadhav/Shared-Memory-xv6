@@ -34,18 +34,6 @@ int main(int argc, char *argv[]) {
             exit();
 		}
 
-        dt = shmdt(ptr1);
-		if(dt < 0) {
-			printf(1, "Fail shmdt\n");
-            exit();
-		}
-
-        dt = shmdt(ptr1);
-		if(dt < 0) {
-			printf(1, "Fail shmdt\n");
-            exit();
-		}
-
 		struct shmid_ds check;
 
 		int ct = shmctl(shmid, IPC_STAT, &check);
