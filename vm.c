@@ -550,7 +550,7 @@ int shmdt(void* shmaddr)
 void*
 shmat(int shmid, void* shmaddr, int shmflag)
 {
-  int index = -1,idx;
+  int index = -1,idx, permflag;
   uint segment,size = 0;
   void *va = (void*)HEAPLIMIT, *least_va;
   struct proc *process = myproc();
@@ -644,9 +644,15 @@ shmat(int shmid, void* shmaddr, int shmflag)
     }
 
   }
+  if(shmflag & SHM_RDONLY){
+    permflag = PTE_U;
+  }
+  else{
+    permflag = PTE_W | PTE_U;
+  }
   //cprintf("%x",(uint)va);
   for (int k = 0; k < allRegions[index].size; k++) {
-		if(mappages(process->pgdir, (void*)((uint)va + (k*PGSIZE)), PGSIZE, (uint)allRegions[index].physicalAddr[k], PTE_W | PTE_U) < 0)
+		if(mappages(process->pgdir, (void*)((uint)va + (k*PGSIZE)), PGSIZE, (uint)allRegions[index].physicalAddr[k], permflag) < 0)
     {
       deallocuvm(process->pgdir,(uint)va,(uint)(va + allRegions[index].size));
       return (void*)-1;
@@ -666,6 +672,7 @@ shmat(int shmid, void* shmaddr, int shmflag)
     process->pages[idx].virtualAddr = va;
     process->pages[idx].key = allRegions[index].key;
     process->pages[idx].size =  allRegions[index].size;
+    process->pages[idx].perm = permflag;
     allRegions[index].buffer.shm_nattch += 1;
   }
   else {
@@ -771,7 +778,7 @@ getShmidIndex(int shmid) {
 void mappagesWrapper(struct proc *process, int shmIndex, int index) {
   for(int i = 0; i < process->pages[index].size; i++) {
     uint va = (uint)process->pages[index].virtualAddr;
-    if(mappages(process->pgdir, (void*)(va + (i * PGSIZE)), PGSIZE, (uint)allRegions[shmIndex].physicalAddr[i], PTE_W | PTE_U) < 0) {
+    if(mappages(process->pgdir, (void*)(va + (i * PGSIZE)), PGSIZE, (uint)allRegions[shmIndex].physicalAddr[i], process->pages[index].perm) < 0) {
       deallocuvm(process->pgdir, va, (uint)(va + allRegions[shmIndex].size));
       return;
     }

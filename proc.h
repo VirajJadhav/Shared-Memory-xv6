@@ -39,7 +39,7 @@ enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 #define SHAREDREGIONS 64 // same as marco in memlayout.h
 typedef struct sharedPages {
   uint key, size;
-  int shmid;
+  int shmid,perm;
   void *virtualAddr;
 } sharedPages;
 

@@ -117,6 +117,7 @@ found:
     p->pages[i].key = -1;
     p->pages[i].shmid = -1;
     p->pages[i].size  = 0;
+    p->pages[i].perm = PTE_W | PTE_U;
     p->pages[i].virtualAddr = (void *)0;
   }
 

@@ -12,7 +12,7 @@ int main(int argc, char *argv[]) {
 		printf(1, "fail shmget\n");
         exit();
 	}
-	char *ptr1 = (char *)shmat(shmid, (void *)0, 0);
+	char *ptr1 = (char *)shmat(shmid, (void *)0,0);
 	if(!ptr1) {
 		printf(1, "Fail shmat\n");
         exit();
