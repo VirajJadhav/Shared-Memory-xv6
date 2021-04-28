@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
             exit();
 		}
 
-		printf(1, "\nData: \n%d\n%d\n%d\n", check.shm_perm.__key, check.shm_segsz, check.shm_nattch);
+		printf(1, "\nData: \n%d\n%d\n%d\n%d\n%d\n", check.shm_perm.__key, check.shm_segsz, check.shm_nattch,check.shm_lpid,check.shm_cpid);
 	}
 
     exit();

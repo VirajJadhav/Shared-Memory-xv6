@@ -533,6 +533,7 @@ int shmdt(void* shmaddr)
     if(allRegions[shmid].buffer.shm_nattch > 0) {
       allRegions[shmid].buffer.shm_nattch -= 1;
     }
+    allRegions[shmid].buffer.shm_lpid = process->pid;
     return 0;
   }
   else
@@ -544,8 +545,6 @@ int shmdt(void* shmaddr)
   TODO:
     1. Some more error checks.
     2. Error check for request with more than 64 pages?
-    3. Handle R, W, X Permissions
-    4. Update access times in ds
 */
 void*
 shmat(int shmid, void* shmaddr, int shmflag)
@@ -674,6 +673,7 @@ shmat(int shmid, void* shmaddr, int shmflag)
     process->pages[idx].size =  allRegions[index].size;
     process->pages[idx].perm = permflag;
     allRegions[index].buffer.shm_nattch += 1;
+    allRegions[index].buffer.shm_lpid = process->pid;
   }
   else {
     return (void*)-1; // all page regions exhausted
@@ -717,6 +717,7 @@ shmctl(int shmid, int cmd, void *buf) {
           buffer->shm_perm.__key = allRegions[index].buffer.shm_perm.__key;
           buffer->shm_perm.mode = checkPerm;
           buffer->shm_cpid = allRegions[index].buffer.shm_cpid;
+          buffer->shm_lpid = allRegions[index].buffer.shm_lpid;
           return 0;
         } else {
           return -1;
@@ -736,6 +737,7 @@ shmctl(int shmid, int cmd, void *buf) {
           allRegions[index].buffer.shm_perm.__key = -1;
           allRegions[index].buffer.shm_perm.mode = 0;
           allRegions[index].buffer.shm_cpid = -1;
+          allRegions[index].buffer.shm_lpid = -1;
           return 0;
         } else {
           return -1;
@@ -758,6 +760,7 @@ sharedMemoryInit(void) {
     allRegions[i].buffer.shm_perm.__key = -1;
     allRegions[i].buffer.shm_perm.mode = 0;
     allRegions[i].buffer.shm_cpid = -1;
+    allRegions[i].buffer.shm_lpid = -1;
     for(int j = 0; j < SHAREDREGIONS; j++) {
       allRegions[i].physicalAddr[j] = (void *)0;
     }

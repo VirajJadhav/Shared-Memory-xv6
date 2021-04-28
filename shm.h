@@ -23,4 +23,5 @@ struct shmid_ds {
   uint shm_segsz; // size of segment in bytes
   int shm_nattch; // current attaches
   int shm_cpid;
+  int shm_lpid;
 };
