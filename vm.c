@@ -695,9 +695,6 @@ shmctl(int shmid, int cmd, void *buf) {
   struct shmid_ds *buffer = (struct shmid_ds *)buf;
 
   int index = -1;
-  /*
-    can be changed to direct access instead of liner (i.e. shmid == index)
-  */
   for(int i = 0; i < SHAREDREGIONS; i++) {
     if(allRegions[i].shmid == shmid) {
       index = i;
@@ -709,6 +706,18 @@ shmctl(int shmid, int cmd, void *buf) {
   } else {
     int checkPerm = allRegions[index].buffer.shm_perm.mode;
     switch(cmd) {
+      case IPC_SET:
+        if(buffer) {
+          if((buffer->shm_perm.mode == READ_SHM) || (buffer->shm_perm.mode == RW_SHM)) {
+            allRegions[index].buffer.shm_perm.mode = buffer->shm_perm.mode;
+            return 0;
+          } else {
+            return -1;
+          }
+        } else {
+          return -1;
+        }
+        break;
       case SHM_STAT:
       case IPC_STAT:
         if(buffer && (checkPerm == READ_SHM || checkPerm == RW_SHM)) {
@@ -773,6 +782,7 @@ getShmidIndex(int shmid) {
   for(int i = 0; i < SHAREDREGIONS; i++) {
     if(allRegions[i].shmid == shmid) {
       index = i;
+      break;
     }
   }
   return index;
