@@ -6,44 +6,183 @@
 #include "shm.h"
 #include "memlayout.h"
 
+#define KEY1 2000
+#define KEY2 4000
+
+int basicSharedTest();	// Create segment, write, read and destory test
+void shmgetTest();	// variants of shmget
+int forkTest();		// Two forks, parent write, child-1 write, child-2 write, parent read (parent attach)
+
 int main(int argc, char *argv[]) {
-    int shmid = shmget(2000, 2050, 06 | IPC_CREAT);
-	if(shmid < 0) {
-		printf(1, "fail shmget\n");
-        exit();
+    if(basicSharedTest() < 0) {
+		printf(1, "failed\n");
 	}
-	char *ptr1 = (char *)shmat(shmid, (void *)0,0);
-	if(!ptr1) {
-		printf(1, "Fail shmat\n");
-        exit();
-	}
-	int pid = fork();
-	if(pid == 0) {
-		for(int i = 0; i < 5; i++) {
-			ptr1[i] = 'A';
-		}
-	} else {
-		wait();
-		printf(1, "Read: \n");
-		for(int i = 0; i < 5; i++) {
-			printf(1, "%c", ptr1[i]);
-		}
-		int dt = shmdt(ptr1);
-		if(dt < 0) {
-			printf(1, "Fail shmdt\n");
-            exit();
-		}
-
-		struct shmid_ds check;
-
-		int ct = shmctl(shmid, IPC_STAT, &check);
-		if(ct < 0) {
-			printf(1, "Fail shmctl\n");
-            exit();
-		}
-
-		printf(1, "\nData: \n%d\n%d\n%d\n%d\n%d\n", check.shm_perm.__key, check.shm_segsz, check.shm_nattch,check.shm_lpid,check.shm_cpid);
+	shmgetTest();
+	if(forkTest() < 0) {
+		printf(1, "failed\n");
 	}
 
     exit();
+}
+
+int basicSharedTest() {
+	printf(1, "Create segment, write, read and destory test - ");
+	char *string = "Test String";
+	int shmid = shmget(KEY1, 2565, 06 | IPC_CREAT);
+	if(shmid < 0) {
+		return -1;
+	}
+	char *ptr = (char *)shmat(shmid, (void *)0, 0);
+	if((int)ptr < 0) {
+		return -1;
+	}
+	for(int i = 0; string[i] != 0; i++) {
+		ptr[i] = string[i];
+	}
+
+	int dt = shmdt(ptr);
+	if(dt < 0) {
+		return -1;
+	}
+
+	ptr = (char *)shmat(shmid, (void *)0, 0);
+	if((int)ptr < 0) {
+		return -1;
+	}
+
+	for(int i = 0; string[i] != 0; i++) {
+		if(ptr[i] != string[i]) {
+			return -1;
+		}
+	}
+
+	dt = shmdt(ptr);
+	if(dt < 0) {
+		return -1;
+	}
+	int ctl = shmctl(shmid, IPC_RMID, (void *)0);
+	if(ctl < 0) {
+		return -1;
+	}
+	printf(1, "Pass\n");
+	return 0;
+}
+
+void shmgetTest() {
+	printf(1, "Tests for variants of shmget :\n");
+	printf(1, "\t- To check negative key input - ");
+	int shmid = shmget(-1, 5000, 06 | IPC_CREAT);
+	if(shmid < 0) {
+		printf(1, "Pass\n");
+	} else {
+		printf(1, "Fail\n");
+	}
+	printf(1, "\t- Region permission other than Read / Read-Write - ");
+	shmid = shmget(KEY1, 4000, IPC_CREAT);
+	if(shmid < 0) {
+		printf(1, "Pass\n");
+	} else {
+		printf(1, "Fail\n");
+	}
+	printf(1, "\t- Requesting region with more than decided pages ( > 64) - ");
+	shmid = shmget(KEY1, 1.6e+7 + 40, 06 | IPC_CREAT);
+	if(shmid < 0) {
+		printf(1, "Pass\n");
+	} else {
+		printf(1, "Fail\n");
+	}
+	printf(1, "\t- Requesting region with zero size - ");
+	shmid = shmget(KEY1, 0, 06 | IPC_CREAT);
+	if(shmid < 0) {
+		printf(1, "Pass\n");
+	} else {
+		printf(1, "Fail\n");
+	}
+	printf(1, "\t- Check for creation of valid region with IPC_CREAT - ");
+	shmid = shmget(KEY1, 2000, 06 | IPC_CREAT);
+	if(shmid < 0) {
+		printf(1, "Fail\n");
+	} else {
+		printf(1, "Pass\n");
+	}
+	printf(1, "\t- Check for retrieving previously created region's shmid - ");
+	int prevShmid = shmget(KEY1, 2000, 0);
+	if(prevShmid == shmid) {
+		printf(1, "Pass\n");
+	} else {
+		printf(1, "Fail\n");
+	}
+	printf(1, "\t- Check for creation of valid region with IPC_PRIVATE - ");
+	shmid = shmget(IPC_PRIVATE, 2000, 06);
+	if(shmid < 0) {
+		printf(1, "Fail\n");
+	} else {
+		printf(1, "Pass\n");
+	}
+	printf(1, "\t- Check for IPC_CREAT | IPC_EXCL on existing region - ");
+	shmid = shmget(KEY1, 0, 06 | IPC_CREAT | IPC_EXCL);
+	if(shmid < 0) {
+		printf(1, "Pass\n");
+	} else {
+		printf(1, "Fail\n");
+	}
+	printf(1, "\t- Check for IPC_EXCL alone, without IPC_CREAT - ");
+	shmid = shmget(KEY2, 0, 06 | IPC_EXCL);
+	if(shmid < 0) {
+		printf(1, "Pass\n");
+	} else {
+		printf(1, "Fail\n");
+	}
+}
+
+int forkTest() {
+	printf(1, "2 Forks (Parent attach; parent-child1-child2 write; parent read) - ");
+	char *string = "AAAAABBBBBCCCCC";
+	int shmid = shmget(KEY1, 2565, 06 | IPC_CREAT);
+	if(shmid < 0) {
+		return -1;
+	}
+	char *ptr = (char *)shmat(shmid, (void *)0, 0);
+	if((int)ptr < 0) {
+		return -1;
+	}
+	for(int i = 0; i < 5; i++) {
+		ptr[i] = string[i];
+	}
+	int pid = fork();
+	if(pid < 0) {
+		return -1;
+	} else if(pid == 0) {
+		int pid1 = fork();
+		if(pid1 < 0) {
+			return -1;
+		} else if(pid1 == 0) {
+			for(int i = 5; i < 10; i++) {
+				ptr[i] = string[i];
+			}
+		} else {
+			wait();
+			for(int i = 10; string[i] != 0; i++) {
+				ptr[i] = string[i];
+			}
+		}
+	} else {
+		wait();
+		for(int i = 0; string[i] != 0; i++) {
+			if(ptr[i] != string[i]) {
+				return -1;
+			}
+		}
+		int dt = shmdt(ptr);
+		if(dt < 0) {
+			return -1;
+		}
+		int ctl = shmctl(shmid, IPC_RMID, (void *)0);
+		if(ctl < 0) {
+			return -1;
+		}
+		printf(1, "Pass\n");
+		return 0;
+	}
+	return 0;
 }

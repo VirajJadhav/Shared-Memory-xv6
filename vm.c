@@ -413,12 +413,20 @@ shmget(uint key, uint size, int shmflag) {
     permission = RW_SHM;
     shmflag ^= RW_SHM;
   } else {
+    if(!((shmflag == 0) && (key != IPC_PRIVATE))) {
+      return -1;
+    }
+  }
+  if(size <= 0) {
     return -1;
   }
-  
-  int index = -1;
   // calculate no of requested pages, from entered size
   int noOfPages = (size / PGSIZE) + 1;
+  // check if no of pages is more than decided limit
+  if(noOfPages > SHAREDREGIONS) {
+    return -1;
+  }
+  int index = -1;
   // check if key already exists
   for(int i = 0; i < SHAREDREGIONS; i++) {
     if(allRegions[i].key == key) {
