@@ -687,10 +687,10 @@ shmat(int shmid, void* shmaddr, int shmflag)
     }
 
   }
-  if(shmflag & SHM_RDONLY ){
+  if((shmflag & SHM_RDONLY) || (shmTable.allRegions[index].buffer.shm_perm.mode == READ_SHM)){
     permflag = PTE_U;
   }
-  else if (shmTable.allRegions[index].buffer.shm_perm.mode != READ_SHM) {
+  else if (shmTable.allRegions[index].buffer.shm_perm.mode == RW_SHM) {
     permflag = PTE_W | PTE_U;
   }
   else {
@@ -732,11 +732,6 @@ shmat(int shmid, void* shmaddr, int shmflag)
   return va;
 }
 
-/*
-  TODO:
-    1. Handle cmd
-    2. Error checks
-*/
 int
 shmctl(int shmid, int cmd, void *buf) {
   if(shmid < 0 || shmid > 64){

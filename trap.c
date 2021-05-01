@@ -78,6 +78,15 @@ trap(struct trapframe *tf)
     lapiceoi();
     break;
 
+  /*
+    Shared memory:
+      handled, while writing into a region with read-only access
+  */
+  case 14:
+    cprintf("Segmentation fault (Core dumped)\n");
+    myproc()->killed = 1;
+    break;
+
   //PAGEBREAK: 13
   default:
     if(myproc() == 0 || (tf->cs&3) == 0){
