@@ -12,10 +12,13 @@
 #define KEY4 2006
 #define KEY5 4001
 #define KEY6 7778
+#define KEY7 3567
+
 #define allowedAddr HEAPLIMIT + 3*PGSIZE
 
 int basicSharedTest();	// Create segment, write, read and destory test
 void shmgetTest();	// variants of shmget
+void shmdtTest(); //variants of shmdt
 void shmctlTest();	// variants of shmctl
 void shmatTest(); // variants of shmat
 int forkTest();		// Two forks, parent write, child-1 write, child-2 write, parent read (parent attach)
@@ -26,6 +29,7 @@ int main(int argc, char *argv[]) {
 	}
 	shmgetTest();
 	shmatTest();
+	shmdtTest();
 	shmctlTest();
 	if(forkTest() < 0) {
 		printf(1, "failed\n");
@@ -151,7 +155,8 @@ void shmatTest() {
 	int shmid = shmget(KEY4, 2565, 06 | IPC_CREAT);
     int shmid2 = shmget(KEY5,2565, 06 | IPC_CREAT);
     int shmid3 = shmget(KEY6,2565, 06 | IPC_CREAT);
-	if(shmid < 0 || shmid2 < 0 || shmid3 < 0) {
+	int shmid4 = shmget(KEY7,3000, 04 | IPC_CREAT);
+	if(shmid < 0 || shmid2 < 0 || shmid3 < 0 || shmid4) {
 		printf(1, "Fail\n");
         return;
 	}
@@ -190,6 +195,38 @@ void shmatTest() {
 	} else {
         
 		printf(1, "Fail\n");
+	}
+    printf(1, "\t- Corresponding detach : ");
+    dt = shmdt(ptr);
+    if(dt < 0) {
+		printf(1, "Fail\n");
+	}
+    else{
+        printf(1,"Pass\n");
+    }
+	printf(1, "\t- Requesting Read-Write access for Read-Only region : ");
+	ptr = (char*)shmat(shmid4, (void *)(0), 0);
+	if((int)ptr < 0) {
+		printf(1,"Not allowed ! : Pass\n");
+	} else {
+        
+		printf(1, "Allowed ! : Fail\n");
+	}
+    printf(1, "\t- Corresponding detach : ");
+    dt = shmdt(ptr);
+    if(dt < 0) {
+		printf(1, "Nothing to detach! : Pass\n");
+	}
+    else{
+        printf(1,"Fail\n");
+    }
+	printf(1, "\t- Requesting Read-Only access for Read-Only region : ");
+	ptr = (char*)shmat(shmid4, (void *)(0), SHM_RDONLY);
+	if((int)ptr != -1) {
+		printf(1,"Allowed ! : Pass\n");
+	} else {
+        
+		printf(1, "Not allowed ! : Fail\n");
 	}
     printf(1, "\t- Corresponding detach : ");
     dt = shmdt(ptr);
@@ -253,7 +290,7 @@ void shmatTest() {
     if(dt < 0) {
 		printf(1, "\t\t- Fail\n");
 	}
-    else{
+    else {
         printf(1,"\t\t- Pass\n");
     }
 	nexttest: printf(1, "\t- Trying to overwrite existing mapping without SHM_REMAP flag : ");
@@ -358,6 +395,29 @@ void shmatTest() {
 	ret: return;
 }
 
+void shmdtTest() {
+	int dt,shmid;
+	char* ptr;
+	printf(1, "* Tests for variants of shmdt :\n");
+	shmid = shmget(KEY4, 2565, 06 | IPC_CREAT);
+	ptr = (char *)shmat(shmid, (void *)0, 0);
+	printf(1, "\t- Trying to detach previously attached region: ");
+	dt = shmdt(ptr);
+    if(dt < 0) {
+		printf(1, "Fail\n");
+	}
+	else {
+		printf(1,"Pass\n");
+	}
+	printf(1, "\t- Trying to detach at unattached virtual address: ");
+	dt = shmdt((void*)(KERNBASE - PGSIZE));
+    if(dt < 0) {
+		printf(1, "Pass\n");
+	}
+	else {
+		printf(1,"Fail\n");
+	}
+}	
 void shmctlTest() {
 	printf(1, "* Tests for variants of shmctl :\n");
 	char *string = "Test string";
