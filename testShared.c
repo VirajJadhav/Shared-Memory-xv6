@@ -156,7 +156,7 @@ void shmatTest() {
     int shmid2 = shmget(KEY5,2565, 06 | IPC_CREAT);
     int shmid3 = shmget(KEY6,2565, 06 | IPC_CREAT);
 	int shmid4 = shmget(KEY7,3000, 04 | IPC_CREAT);
-	if(shmid < 0 || shmid2 < 0 || shmid3 < 0 || shmid4) {
+	if(shmid < 0 || shmid2 < 0 || shmid3 < 0 || shmid4 < 0) {
 		printf(1, "Fail\n");
         return;
 	}
