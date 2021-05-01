@@ -501,7 +501,6 @@ int getLeastvaidx(void*curr_va, struct proc *process)
       
       leastva = process->pages[i].virtualAddr;
       idx = i;
-      
     }
   }
   
@@ -580,6 +579,9 @@ shmat(int shmid, void* shmaddr, int shmflag)
   }
   if(shmaddr)
   {
+      if((uint)shmaddr >= KERNBASE || (uint)shmaddr < HEAPLIMIT){
+        return (void*)-1;
+      }
       uint rounded = ((uint)shmaddr & ~(SHMLBA-1));  // round down to nearest multiple of shmlba 
       if(shmflag & SHM_RND)
       {
@@ -593,9 +595,10 @@ shmat(int shmid, void* shmaddr, int shmflag)
       {
         if(rounded == (uint)shmaddr) // page aligned address
         {
-          va = shmaddr;
+          va = shmaddr;    
         }
       }
+      
   }
   else
   {    
@@ -605,7 +608,7 @@ shmat(int shmid, void* shmaddr, int shmflag)
       if(idx != -1)
       {
         least_va = process->pages[idx].virtualAddr;
-        if((uint)va + allRegions[index].size*PGSIZE < (uint)least_va)        
+        if((uint)va + allRegions[index].size*PGSIZE <=  (uint)least_va)        
           break;
         else
           va = (void*)((uint)least_va + process->pages[idx].size*PGSIZE);
@@ -615,7 +618,7 @@ shmat(int shmid, void* shmaddr, int shmflag)
 
     }
   }
-  if((uint)va + allRegions[index].size*PGSIZE >= KERNBASE)
+  if((uint)va + allRegions[index].size*PGSIZE >= KERNBASE )
   {
     // size exceeded
     return (void*)-1;
@@ -632,7 +635,7 @@ shmat(int shmid, void* shmaddr, int shmflag)
     if(shmflag & SHM_REMAP)
     {
       segment = (uint)process->pages[idx].virtualAddr;
-      while(segment <= (uint)va + allRegions[index].size*PGSIZE)
+      while(segment < (uint)va + allRegions[index].size*PGSIZE)
       { 
         size = process->pages[idx].size;
         if(shmdt((void*)segment) == -1)
@@ -651,13 +654,16 @@ shmat(int shmid, void* shmaddr, int shmflag)
     }
 
   }
-  if(shmflag & SHM_RDONLY){
+  if(shmflag & SHM_RDONLY ){
     permflag = PTE_U;
   }
-  else{
+  else if (allRegions[index].buffer.shm_perm.mode != READ_SHM) {
     permflag = PTE_W | PTE_U;
   }
-  //cprintf("%x",(uint)va);
+  else {
+    //permission mismatch between get and attach
+    return (void*)-1;
+  }
   for (int k = 0; k < allRegions[index].size; k++) {
 		if(mappages(process->pgdir, (void*)((uint)va + (k*PGSIZE)), PGSIZE, (uint)allRegions[index].physicalAddr[k], permflag) < 0)
     {

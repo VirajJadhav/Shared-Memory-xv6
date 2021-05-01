@@ -9,10 +9,15 @@
 #define KEY1 2000
 #define KEY2 4000
 #define KEY3 7777
+#define KEY4 2006
+#define KEY5 4001
+#define KEY6 7778
+#define allowedAddr HEAPLIMIT + 3*PGSIZE
 
 int basicSharedTest();	// Create segment, write, read and destory test
 void shmgetTest();	// variants of shmget
 void shmctlTest();	// variants of shmctl
+void shmatTest(); // variants of shmat
 int forkTest();		// Two forks, parent write, child-1 write, child-2 write, parent read (parent attach)
 
 int main(int argc, char *argv[]) {
@@ -20,6 +25,7 @@ int main(int argc, char *argv[]) {
 		printf(1, "failed\n");
 	}
 	shmgetTest();
+	shmatTest();
 	shmctlTest();
 	if(forkTest() < 0) {
 		printf(1, "failed\n");
@@ -137,7 +143,219 @@ void shmgetTest() {
 		printf(1, "Fail\n");
 	}
 }
-
+void shmatTest() {  
+    int dt,i;
+    char *ptr,*ptr2,*ptr3,*ptrarr[100];
+	printf(1, "* Tests for variants of shmat :\n");
+	int shmid = shmget(KEY4, 2565, 06 | IPC_CREAT);
+    int shmid2 = shmget(KEY5,2565, 06 | IPC_CREAT);
+    int shmid3 = shmget(KEY6,2565, 06 | IPC_CREAT);
+	if(shmid < 0) {
+		printf(1, "Fail\n");
+        return;
+	} 
+	printf(1, "\t- Non-existent shmid within allowed range: ");
+	ptr = (char *)shmat(35, (void *)0, 0);
+	if((int)ptr < 0) {
+		printf(1,"Pass\n");
+	} else {
+		printf(1, "Fail\n");
+	}
+    printf(1, "\t- Check shmid beyond allowed range: ");
+	ptr = (char *)shmat(1000, (void *)0, 0);
+	if((int)ptr < 0) {
+		printf(1,"Pass\n");
+	} else {
+		printf(1, "Fail\n");
+	}
+    printf(1, "\t- Requesting for address beyond lower limit: ");
+	ptr = (char *)shmat(shmid, (void *)(HEAPLIMIT - 10), 0);
+	if((int)ptr < 0) {
+		printf(1,"Pass\n");
+	} else {
+		printf(1, "Fail\n");
+	}
+    printf(1, "\t- Requesting for address beyond upper limit: ");
+	ptr = (char *)shmat(shmid, (void *)(KERNBASE + 10), 0);
+	if((int)ptr < 0) {
+		printf(1,"Pass\n");
+	} else {
+		printf(1, "Fail\n");
+	}
+    printf(1, "\t- Requesting for page-aligned address within range : ");
+	ptr = (char*)shmat(shmid, (void *)(allowedAddr), 0);
+	if((uint)ptr == allowedAddr) {
+		printf(1,"Pass\n");
+	} else {
+        
+		printf(1, "Fail\n");
+	}
+    printf(1, "\t- Corresponding detach : ");
+    dt = shmdt(ptr);
+    if(dt < 0) {
+		printf(1, "Fail\n");
+	}
+    else{
+        printf(1,"Pass\n");
+    }
+    printf(1, "\t- Checking rounding down for non page-aligned address within range : ");
+	ptr = (char *)shmat(shmid, (void *)(allowedAddr + 7), SHM_RND);
+	if((uint)ptr == allowedAddr) {
+		printf(1,"Pass\n");
+	} else {
+		printf(1, "Fail\n");
+	}
+    printf(1, "\t- Corresponding detach : ");
+    dt = shmdt(ptr);
+    if(dt < 0) {
+		printf(1, "Fail\n");
+	}
+    else{
+        printf(1,"Pass\n");
+    }
+    printf(1, "\t- Checking compactness of memory mappings & filling of holes: ");
+    ptr = (char *)shmat(shmid, (void *)0, 0);
+	if((uint)ptr != HEAPLIMIT) {
+		printf(1, "Fail\n");
+        printf(1,"%x",(uint)ptr);
+        shmdt(ptr);
+        goto nexttest;
+	}
+    ptr2 = (char *)shmat(shmid2, (void *)(HEAPLIMIT + 2*PGSIZE), 0);
+    if((uint)ptr2 != HEAPLIMIT+ 2*PGSIZE) {
+		printf(1, "Fail\n");
+        shmdt(ptr2);
+        goto nexttest;
+	}
+    ptr3 = (char *)shmat(shmid3, (void *)(0), 0);
+    if((uint)ptr3 == HEAPLIMIT + PGSIZE) {
+		printf(1,"Pass\n");
+	} else {
+		printf(1, "Fail\n");
+	}
+    printf(1, "\t- Corresponding detaches (3) : \n ");
+    dt = shmdt(ptr);
+    if(dt < 0) {
+		printf(1, "\t\t- Fail\n");
+	}
+    else{
+        printf(1,"\t\t- Pass\n");
+    }
+    dt = shmdt(ptr2);
+    if(dt < 0) {
+		printf(1, "\t\t- Fail\n");
+	}
+    else{
+        printf(1,"\t\t- Pass\n");
+    }
+    dt = shmdt(ptr3);
+    if(dt < 0) {
+		printf(1, "\t\t- Fail\n");
+	}
+    else{
+        printf(1,"\t\t- Pass\n");
+    }
+	nexttest: printf(1, "\t- Trying to overwrite existing mapping without SHM_REMAP flag : ");
+    ptr = (char *)shmat(shmid, (void *)HEAPLIMIT, 0);
+	if((uint)ptr != HEAPLIMIT) {
+		printf(1, "Fail\n");
+        shmdt(ptr);
+        goto nexttest2;
+	}
+    ptr2 = (char *)shmat(shmid2, (void *)(HEAPLIMIT + PGSIZE), 0);
+    if((uint)ptr2 != HEAPLIMIT+ PGSIZE) {
+		printf(1, "Fail\n");
+        shmdt(ptr2);
+        goto nexttest2;
+	}
+    ptr3 = (char *)shmat(shmid3, (void *)(HEAPLIMIT), 0);
+    if((int)ptr3 < 0) {
+		printf(1,"Cannot Overwrite! : Pass\n");
+	} else {
+        shmdt(ptr3);
+		printf(1, "Fail\n");
+	}
+    printf(1, "\t- Corresponding detaches (2) : \n ");
+    dt = shmdt(ptr);
+    if(dt < 0) {
+		printf(1, "\t\t- Fail\n");
+	}
+    else{
+        printf(1,"\t\t- Pass\n");
+    }
+    dt = shmdt(ptr2);
+    if(dt < 0) {
+		printf(1, "\t\t- Fail\n");
+	}
+    else{
+        printf(1,"\t\t- Pass\n");
+    }
+	nexttest2: printf(1, "\t- Trying to overwrite existing mapping with SHM_REMAP flag: ");
+    ptr = (char *)shmat(shmid, (void *)HEAPLIMIT, 0);
+	if((uint)ptr != HEAPLIMIT) {
+		printf(1, "Fail\n");
+        shmdt(ptr);
+        goto nexttest3;
+	}
+    ptr2 = (char *)shmat(shmid2, (void *)(HEAPLIMIT + PGSIZE), 0);
+    if((uint)ptr2 != HEAPLIMIT+ PGSIZE) {
+		printf(1, "Fail\n");
+        shmdt(ptr);
+        shmdt(ptr2);
+        goto nexttest3;
+	}
+    ptr3 = (char *)shmat(shmid3, (void *)(HEAPLIMIT), SHM_REMAP);
+    if((uint)ptr3 == HEAPLIMIT) {
+		printf(1,"Can Overwrite! : Pass\n");
+	} else {
+		printf(1, "Fail\n");
+	}
+    printf(1, "\t- Corresponding detaches (3) : \n ");
+    dt = shmdt(ptr);
+    if(dt < 0) {
+		printf(1, "\t\t- Fail\n");
+	}
+    else{
+        printf(1,"\t\t- Pass\n");
+    }
+    dt = shmdt(ptr2);
+    if(dt < 0) {
+		printf(1, "\t\t- Fail\n");
+	}
+    else{
+        printf(1,"\t\t- Pass\n");
+    }
+    dt = shmdt(ptr3);
+    if(dt < 0) {
+		printf(1, "\t\t- Pass\n");
+	}
+    else{
+        printf(1,"\t\t- Fail\n");
+    }
+    nexttest3: printf(1, "\t- Trying to exhaust all regions for the process: ");
+	for(i = 0; ; i++){
+		ptrarr[i] = (char*)shmat(shmid,(void*)0,0);
+		if((int)ptrarr[i] < 0){
+			break;
+		}
+	}
+	if(i == SHAREDREGIONS) {
+		printf(1, "Pass\n");
+	}
+	else {
+		printf(1,"Fail\n");
+	}
+	printf(1, "\t- Corresponding detaches (%d) : \n ",i);
+	for(int j = 0; j < i; j++)
+	{
+		if(shmdt(ptrarr[j]) < 0) {
+			printf(1,"Fail\n");
+			goto ret;
+		}
+	}
+	printf(1, "\t\t- All Passed\n");
+	ret: return;
+}
 void shmctlTest() {
 	printf(1, "* Tests for variants of shmctl :\n");
 	char *string = "Test string";
