@@ -16,6 +16,7 @@
 
 int basicSharedTest();	// Create segment, write, read and destory test
 void shmgetTest();	// variants of shmget
+void shmdtTest(); //variants of shmdt
 void shmctlTest();	// variants of shmctl
 void shmatTest(); // variants of shmat
 int forkTest();		// Two forks, parent write, child-1 write, child-2 write, parent read (parent attach)
@@ -26,6 +27,7 @@ int main(int argc, char *argv[]) {
 	}
 	shmgetTest();
 	shmatTest();
+	shmdtTest();
 	shmctlTest();
 	if(forkTest() < 0) {
 		printf(1, "failed\n");
@@ -252,7 +254,7 @@ void shmatTest() {
     if(dt < 0) {
 		printf(1, "\t\t- Fail\n");
 	}
-    else{
+    else {
         printf(1,"\t\t- Pass\n");
     }
 	nexttest: printf(1, "\t- Trying to overwrite existing mapping without SHM_REMAP flag : ");
@@ -356,6 +358,29 @@ void shmatTest() {
 	printf(1, "\t\t- All Passed\n");
 	ret: return;
 }
+void shmdtTest() {
+	int dt,shmid;
+	char* ptr;
+	printf(1, "* Tests for variants of shmdt :\n");
+	shmid = shmget(KEY4, 2565, 06 | IPC_CREAT);
+	ptr = (char *)shmat(shmid, (void *)0, 0);
+	printf(1, "\t- Trying to detach previously attached region: ");
+	dt = shmdt(ptr);
+    if(dt < 0) {
+		printf(1, "Fail\n");
+	}
+	else {
+		printf(1,"Pass\n");
+	}
+	printf(1, "\t- Trying to detach at unattached virtual address: ");
+	dt = shmdt((void*)(KERNBASE - PGSIZE));
+    if(dt < 0) {
+		printf(1, "Pass\n");
+	}
+	else {
+		printf(1,"Fail\n");
+	}
+}	
 void shmctlTest() {
 	printf(1, "* Tests for variants of shmctl :\n");
 	char *string = "Test string";
