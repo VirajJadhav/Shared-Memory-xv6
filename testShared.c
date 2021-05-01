@@ -143,6 +143,7 @@ void shmgetTest() {
 		printf(1, "Fail\n");
 	}
 }
+
 void shmatTest() {  
     int dt,i;
     char *ptr,*ptr2,*ptr3,*ptrarr[100];
@@ -150,10 +151,10 @@ void shmatTest() {
 	int shmid = shmget(KEY4, 2565, 06 | IPC_CREAT);
     int shmid2 = shmget(KEY5,2565, 06 | IPC_CREAT);
     int shmid3 = shmget(KEY6,2565, 06 | IPC_CREAT);
-	if(shmid < 0) {
+	if(shmid < 0 || shmid2 < 0 || shmid3 < 0) {
 		printf(1, "Fail\n");
         return;
-	} 
+	}
 	printf(1, "\t- Non-existent shmid within allowed range: ");
 	ptr = (char *)shmat(35, (void *)0, 0);
 	if((int)ptr < 0) {
@@ -356,6 +357,7 @@ void shmatTest() {
 	printf(1, "\t\t- All Passed\n");
 	ret: return;
 }
+
 void shmctlTest() {
 	printf(1, "* Tests for variants of shmctl :\n");
 	char *string = "Test string";

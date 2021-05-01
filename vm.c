@@ -9,6 +9,7 @@
 
 #include "shm.h"
 #include "ipc.h"
+#include "spinlock.h"
 
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
@@ -398,12 +399,18 @@ struct shmRegion {
   struct shmid_ds buffer;
 };
 
-struct shmRegion allRegions[SHAREDREGIONS];
+struct shmTable {
+  struct spinlock lock;
+  struct shmRegion allRegions[SHAREDREGIONS];
+} shmTable;
+
 
 int
 shmget(uint key, uint size, int shmflag) {
   // as Xv6 has only single user, else lower 9 bits would be considered
   int lowerBits = shmflag & 7, permission = -1;
+
+  acquire(&shmTable.lock);
   
   if(lowerBits == (int)READ_SHM) {
     permission = READ_SHM;
@@ -414,49 +421,58 @@ shmget(uint key, uint size, int shmflag) {
     shmflag ^= RW_SHM;
   } else {
     if(!((shmflag == 0) && (key != IPC_PRIVATE))) {
+      release(&shmTable.lock);
       return -1;
     }
   }
   if(size <= 0) {
+    release(&shmTable.lock);
     return -1;
   }
   // calculate no of requested pages, from entered size
   int noOfPages = (size / PGSIZE) + 1;
   // check if no of pages is more than decided limit
   if(noOfPages > SHAREDREGIONS) {
+    release(&shmTable.lock);
     return -1;
   }
   int index = -1;
   // check if key already exists
   for(int i = 0; i < SHAREDREGIONS; i++) {
-    if(allRegions[i].key == key) {
-      if(allRegions[i].size != noOfPages) {
+    if(shmTable.allRegions[i].key == key) {
+      if(shmTable.allRegions[i].size != noOfPages) {
+        release(&shmTable.lock);
         return -1;
       }
       if(shmflag == (IPC_CREAT | IPC_EXCL)) {
+        release(&shmTable.lock);
         return -1;
       }
-      int checkPerm = allRegions[i].buffer.shm_perm.mode;
+      int checkPerm = shmTable.allRegions[i].buffer.shm_perm.mode;
       if(checkPerm == READ_SHM || checkPerm == RW_SHM) {
         if((shmflag == 0) && (key != IPC_PRIVATE)) {
-          return allRegions[i].shmid;
+          release(&shmTable.lock);
+          return shmTable.allRegions[i].shmid;
         }
         if(shmflag == IPC_CREAT) {
-          return allRegions[i].shmid;
+          release(&shmTable.lock);
+          return shmTable.allRegions[i].shmid;
         }
       }
+      release(&shmTable.lock);
       return -1;
     }
   }
   // check for first valid shared memory region, that can be allocated
   for(int i = 0; i < SHAREDREGIONS; i++) {
-    if(allRegions[i].key == -1) {
+    if(shmTable.allRegions[i].key == -1) {
       index = i;
       break;
     }
   }
   // memory regions are exhausted
   if(index == -1) {
+    release(&shmTable.lock);
     return -1;
   }
   if((key == IPC_PRIVATE) || (shmflag == IPC_CREAT) || (shmflag == (IPC_CREAT | IPC_EXCL))) {
@@ -465,29 +481,32 @@ shmget(uint key, uint size, int shmflag) {
       char *newPage = kalloc();
       if(newPage == 0){
         cprintf("shmget: failed to allocate a page (out of memory)\n");
+        release(&shmTable.lock);
         return -1;
       }
       memset(newPage, 0, PGSIZE);
-      allRegions[index].physicalAddr[i] = (void *)V2P(newPage);
+      shmTable.allRegions[index].physicalAddr[i] = (void *)V2P(newPage);
     }
     // mark rest of the fields in structure
-    allRegions[index].size = noOfPages;
-    allRegions[index].key = key;
+    shmTable.allRegions[index].size = noOfPages;
+    shmTable.allRegions[index].key = key;
 
-    allRegions[index].buffer.shm_segsz = size;
-    allRegions[index].buffer.shm_perm.__key = key;
-    allRegions[index].buffer.shm_perm.mode = permission;
+    shmTable.allRegions[index].buffer.shm_segsz = size;
+    shmTable.allRegions[index].buffer.shm_perm.__key = key;
+    shmTable.allRegions[index].buffer.shm_perm.mode = permission;
 
     // store creator pid
-    allRegions[index].buffer.shm_cpid = myproc()->pid;
+    shmTable.allRegions[index].buffer.shm_cpid = myproc()->pid;
 
     int shmid = index;
     
     // store shmid in not yet shared region
-    allRegions[index].shmid = shmid;
+    shmTable.allRegions[index].shmid = shmid;
 
+    release(&shmTable.lock);
     return shmid;
   } else {
+    release(&shmTable.lock);
     return -1;
   }  
 }
@@ -509,6 +528,7 @@ int getLeastvaidx(void*curr_va, struct proc *process)
 
 int shmdt(void* shmaddr)
 {
+  acquire(&shmTable.lock);
   struct proc *process = myproc();
   void* va = (void*)0;
   uint size;
@@ -529,6 +549,7 @@ int shmdt(void* shmaddr)
     {
       pte_t* pte = walkpgdir(process->pgdir, (void*)((uint)va + i*PGSIZE), 0);
       if(pte == 0) {
+        release(&shmTable.lock);
         return -1;
       }
 		  *pte = 0;
@@ -537,14 +558,16 @@ int shmdt(void* shmaddr)
     process->pages[index].key = -1;
     process->pages[index].size =  0;
     process->pages[index].virtualAddr = (void*)0;
-    if(allRegions[shmid].buffer.shm_nattch > 0) {
-      allRegions[shmid].buffer.shm_nattch -= 1;
+    if(shmTable.allRegions[shmid].buffer.shm_nattch > 0) {
+      shmTable.allRegions[shmid].buffer.shm_nattch -= 1;
     }
-    allRegions[shmid].buffer.shm_lpid = process->pid;
+    shmTable.allRegions[shmid].buffer.shm_lpid = process->pid;
+    release(&shmTable.lock);
     return 0;
-  }
-  else
+  } else {
+    release(&shmTable.lock);
     return -1;
+  }
   
 }
   
@@ -556,17 +579,18 @@ int shmdt(void* shmaddr)
 void*
 shmat(int shmid, void* shmaddr, int shmflag)
 {
-  int index = -1,idx, permflag;
-  uint segment,size = 0;
-  void *va = (void*)HEAPLIMIT, *least_va;
-  struct proc *process = myproc();
   if(shmid < 0 || shmid > 64)
   {
     return (void*)-1;
   }
+  acquire(&shmTable.lock);
+  int index = -1,idx, permflag;
+  uint segment,size = 0;
+  void *va = (void*)HEAPLIMIT, *least_va;
+  struct proc *process = myproc();
   for(int i = 0; i < SHAREDREGIONS; i++) 
   {
-    if(allRegions[i].shmid == shmid)
+    if(shmTable.allRegions[i].shmid == shmid)
     {
       index = i;
       break;
@@ -575,11 +599,13 @@ shmat(int shmid, void* shmaddr, int shmflag)
   if(index == -1)
   {
     // shmid not found
+    release(&shmTable.lock);
     return (void*)-1;
   }
   if(shmaddr)
   {
       if((uint)shmaddr >= KERNBASE || (uint)shmaddr < HEAPLIMIT){
+        release(&shmTable.lock);
         return (void*)-1;
       }
       uint rounded = ((uint)shmaddr & ~(SHMLBA-1));  // round down to nearest multiple of shmlba 
@@ -587,6 +613,7 @@ shmat(int shmid, void* shmaddr, int shmflag)
       {
         if(!rounded)
         {
+          release(&shmTable.lock);
           return (void*)-1;
         }
         va = (void*)rounded;
@@ -608,7 +635,7 @@ shmat(int shmid, void* shmaddr, int shmflag)
       if(idx != -1)
       {
         least_va = process->pages[idx].virtualAddr;
-        if((uint)va + allRegions[index].size*PGSIZE <=  (uint)least_va)        
+        if((uint)va + shmTable.allRegions[index].size*PGSIZE <=  (uint)least_va)        
           break;
         else
           va = (void*)((uint)least_va + process->pages[idx].size*PGSIZE);
@@ -618,9 +645,10 @@ shmat(int shmid, void* shmaddr, int shmflag)
 
     }
   }
-  if((uint)va + allRegions[index].size*PGSIZE >= KERNBASE )
+  if((uint)va + shmTable.allRegions[index].size*PGSIZE >= KERNBASE )
   {
     // size exceeded
+    release(&shmTable.lock);
     return (void*)-1;
   }
   idx = -1;
@@ -635,13 +663,17 @@ shmat(int shmid, void* shmaddr, int shmflag)
     if(shmflag & SHM_REMAP)
     {
       segment = (uint)process->pages[idx].virtualAddr;
-      while(segment < (uint)va + allRegions[index].size*PGSIZE)
+      while(segment < (uint)va + shmTable.allRegions[index].size*PGSIZE)
       { 
         size = process->pages[idx].size;
+        release(&shmTable.lock);
         if(shmdt((void*)segment) == -1)
         {
+          release(&shmTable.lock);
           return (void*)-1;
         }
+        acquire(&shmTable.lock);
+        
         idx = getLeastvaidx((void*)(segment + size*PGSIZE),process);
         if(idx == -1)
           break;
@@ -650,6 +682,7 @@ shmat(int shmid, void* shmaddr, int shmflag)
     }
     else
     {
+      release(&shmTable.lock);
       return (void*)-1;
     }
 
@@ -657,17 +690,19 @@ shmat(int shmid, void* shmaddr, int shmflag)
   if(shmflag & SHM_RDONLY ){
     permflag = PTE_U;
   }
-  else if (allRegions[index].buffer.shm_perm.mode != READ_SHM) {
+  else if (shmTable.allRegions[index].buffer.shm_perm.mode != READ_SHM) {
     permflag = PTE_W | PTE_U;
   }
   else {
     //permission mismatch between get and attach
+    release(&shmTable.lock);
     return (void*)-1;
   }
-  for (int k = 0; k < allRegions[index].size; k++) {
-		if(mappages(process->pgdir, (void*)((uint)va + (k*PGSIZE)), PGSIZE, (uint)allRegions[index].physicalAddr[k], permflag) < 0)
+  for (int k = 0; k < shmTable.allRegions[index].size; k++) {
+		if(mappages(process->pgdir, (void*)((uint)va + (k*PGSIZE)), PGSIZE, (uint)shmTable.allRegions[index].physicalAddr[k], permflag) < 0)
     {
-      deallocuvm(process->pgdir,(uint)va,(uint)(va + allRegions[index].size));
+      deallocuvm(process->pgdir,(uint)va,(uint)(va + shmTable.allRegions[index].size));
+      release(&shmTable.lock);
       return (void*)-1;
     }
 	}
@@ -683,15 +718,17 @@ shmat(int shmid, void* shmaddr, int shmflag)
   if(idx != -1) {
     process->pages[idx].shmid = shmid;  
     process->pages[idx].virtualAddr = va;
-    process->pages[idx].key = allRegions[index].key;
-    process->pages[idx].size =  allRegions[index].size;
+    process->pages[idx].key = shmTable.allRegions[index].key;
+    process->pages[idx].size =  shmTable.allRegions[index].size;
     process->pages[idx].perm = permflag;
-    allRegions[index].buffer.shm_nattch += 1;
-    allRegions[index].buffer.shm_lpid = process->pid;
+    shmTable.allRegions[index].buffer.shm_nattch += 1;
+    shmTable.allRegions[index].buffer.shm_lpid = process->pid;
   }
   else {
+    release(&shmTable.lock);
     return (void*)-1; // all page regions exhausted
   }
+  release(&shmTable.lock);
   return va;
 }
 
@@ -706,67 +743,78 @@ shmctl(int shmid, int cmd, void *buf) {
     return -1;
   }
 
+  acquire(&shmTable.lock);
+
   struct shmid_ds *buffer = (struct shmid_ds *)buf;
 
   int index = -1;
   for(int i = 0; i < SHAREDREGIONS; i++) {
-    if(allRegions[i].shmid == shmid) {
+    if(shmTable.allRegions[i].shmid == shmid) {
       index = i;
       break;
     }
   }
   if(index == -1) {
+    release(&shmTable.lock);
     return -1;
   } else {
-    int checkPerm = allRegions[index].buffer.shm_perm.mode;
+    int checkPerm = shmTable.allRegions[index].buffer.shm_perm.mode;
     switch(cmd) {
       case IPC_SET:
         if(buffer) {
           if((buffer->shm_perm.mode == READ_SHM) || (buffer->shm_perm.mode == RW_SHM)) {
-            allRegions[index].buffer.shm_perm.mode = buffer->shm_perm.mode;
+            shmTable.allRegions[index].buffer.shm_perm.mode = buffer->shm_perm.mode;
+            release(&shmTable.lock);
             return 0;
           } else {
+            release(&shmTable.lock);
             return -1;
           }
         } else {
+          release(&shmTable.lock);
           return -1;
         }
         break;
       case SHM_STAT:
       case IPC_STAT:
         if(buffer && (checkPerm == READ_SHM || checkPerm == RW_SHM)) {
-          buffer->shm_nattch = allRegions[index].buffer.shm_nattch;
-          buffer->shm_segsz = allRegions[index].buffer.shm_segsz;
-          buffer->shm_perm.__key = allRegions[index].buffer.shm_perm.__key;
+          buffer->shm_nattch = shmTable.allRegions[index].buffer.shm_nattch;
+          buffer->shm_segsz = shmTable.allRegions[index].buffer.shm_segsz;
+          buffer->shm_perm.__key = shmTable.allRegions[index].buffer.shm_perm.__key;
           buffer->shm_perm.mode = checkPerm;
-          buffer->shm_cpid = allRegions[index].buffer.shm_cpid;
-          buffer->shm_lpid = allRegions[index].buffer.shm_lpid;
+          buffer->shm_cpid = shmTable.allRegions[index].buffer.shm_cpid;
+          buffer->shm_lpid = shmTable.allRegions[index].buffer.shm_lpid;
+          release(&shmTable.lock);
           return 0;
         } else {
+          release(&shmTable.lock);
           return -1;
         }
         break;
       case IPC_RMID:
-        if(allRegions[index].buffer.shm_nattch == 0) {
-          for(int i = 0; i < allRegions[index].size; i++) {
-            char *addr = (char *)P2V(allRegions[index].physicalAddr[i]);
+        if(shmTable.allRegions[index].buffer.shm_nattch == 0) {
+          for(int i = 0; i < shmTable.allRegions[index].size; i++) {
+            char *addr = (char *)P2V(shmTable.allRegions[index].physicalAddr[i]);
             kfree(addr);
-            allRegions[index].physicalAddr[i] = (void *)0;
+            shmTable.allRegions[index].physicalAddr[i] = (void *)0;
           }
-          allRegions[index].size = 0;
-          allRegions[index].key = allRegions[index].shmid = -1;
-          allRegions[index].buffer.shm_nattch = 0;
-          allRegions[index].buffer.shm_segsz = 0;
-          allRegions[index].buffer.shm_perm.__key = -1;
-          allRegions[index].buffer.shm_perm.mode = 0;
-          allRegions[index].buffer.shm_cpid = -1;
-          allRegions[index].buffer.shm_lpid = -1;
+          shmTable.allRegions[index].size = 0;
+          shmTable.allRegions[index].key = shmTable.allRegions[index].shmid = -1;
+          shmTable.allRegions[index].buffer.shm_nattch = 0;
+          shmTable.allRegions[index].buffer.shm_segsz = 0;
+          shmTable.allRegions[index].buffer.shm_perm.__key = -1;
+          shmTable.allRegions[index].buffer.shm_perm.mode = 0;
+          shmTable.allRegions[index].buffer.shm_cpid = -1;
+          shmTable.allRegions[index].buffer.shm_lpid = -1;
+          release(&shmTable.lock);
           return 0;
         } else {
+          release(&shmTable.lock);
           return -1;
         }
         break;
       default:
+        release(&shmTable.lock);
         return -1;
         break;
     }
@@ -775,38 +823,43 @@ shmctl(int shmid, int cmd, void *buf) {
 
 void
 sharedMemoryInit(void) {
+  initlock(&shmTable.lock, "Shared Memory");
+  acquire(&shmTable.lock);
   for(int i = 0; i < SHAREDREGIONS; i++) {
-    allRegions[i].key = allRegions[i].shmid = -1;
-    allRegions[i].size = 0;
-    allRegions[i].buffer.shm_nattch = 0;
-    allRegions[i].buffer.shm_segsz = 0;
-    allRegions[i].buffer.shm_perm.__key = -1;
-    allRegions[i].buffer.shm_perm.mode = 0;
-    allRegions[i].buffer.shm_cpid = -1;
-    allRegions[i].buffer.shm_lpid = -1;
+    shmTable.allRegions[i].key = shmTable.allRegions[i].shmid = -1;
+    shmTable.allRegions[i].size = 0;
+    shmTable.allRegions[i].buffer.shm_nattch = 0;
+    shmTable.allRegions[i].buffer.shm_segsz = 0;
+    shmTable.allRegions[i].buffer.shm_perm.__key = -1;
+    shmTable.allRegions[i].buffer.shm_perm.mode = 0;
+    shmTable.allRegions[i].buffer.shm_cpid = -1;
+    shmTable.allRegions[i].buffer.shm_lpid = -1;
     for(int j = 0; j < SHAREDREGIONS; j++) {
-      allRegions[i].physicalAddr[j] = (void *)0;
+      shmTable.allRegions[i].physicalAddr[j] = (void *)0;
     }
   }
+  release(&shmTable.lock);
 }
 
 int
 getShmidIndex(int shmid) {
+  acquire(&shmTable.lock);
   int index = -1;
   for(int i = 0; i < SHAREDREGIONS; i++) {
-    if(allRegions[i].shmid == shmid) {
+    if(shmTable.allRegions[i].shmid == shmid) {
       index = i;
       break;
     }
   }
+  release(&shmTable.lock);
   return index;
 }
 
 void mappagesWrapper(struct proc *process, int shmIndex, int index) {
   for(int i = 0; i < process->pages[index].size; i++) {
     uint va = (uint)process->pages[index].virtualAddr;
-    if(mappages(process->pgdir, (void*)(va + (i * PGSIZE)), PGSIZE, (uint)allRegions[shmIndex].physicalAddr[i], process->pages[index].perm) < 0) {
-      deallocuvm(process->pgdir, va, (uint)(va + allRegions[shmIndex].size));
+    if(mappages(process->pgdir, (void*)(va + (i * PGSIZE)), PGSIZE, (uint)shmTable.allRegions[shmIndex].physicalAddr[i], process->pages[index].perm) < 0) {
+      deallocuvm(process->pgdir, va, (uint)(va + shmTable.allRegions[shmIndex].size));
       return;
     }
   }
