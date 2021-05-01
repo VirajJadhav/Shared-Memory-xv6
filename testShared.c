@@ -12,6 +12,8 @@
 #define KEY4 2006
 #define KEY5 4001
 #define KEY6 7778
+#define KEY7 3567
+
 #define allowedAddr HEAPLIMIT + 3*PGSIZE
 
 int basicSharedTest();	// Create segment, write, read and destory test
@@ -152,6 +154,7 @@ void shmatTest() {
 	int shmid = shmget(KEY4, 2565, 06 | IPC_CREAT);
     int shmid2 = shmget(KEY5,2565, 06 | IPC_CREAT);
     int shmid3 = shmget(KEY6,2565, 06 | IPC_CREAT);
+	int shmid4 = shmget(KEY7,3000, 04 | IPC_CREAT);
 	if(shmid < 0) {
 		printf(1, "Fail\n");
         return;
@@ -191,6 +194,38 @@ void shmatTest() {
 	} else {
         
 		printf(1, "Fail\n");
+	}
+    printf(1, "\t- Corresponding detach : ");
+    dt = shmdt(ptr);
+    if(dt < 0) {
+		printf(1, "Fail\n");
+	}
+    else{
+        printf(1,"Pass\n");
+    }
+	printf(1, "\t- Requesting Read-Write access for Read-Only region : ");
+	ptr = (char*)shmat(shmid4, (void *)(0), 0);
+	if((int)ptr < 0) {
+		printf(1,"Not allowed ! : Pass\n");
+	} else {
+        
+		printf(1, "Allowed ! : Fail\n");
+	}
+    printf(1, "\t- Corresponding detach : ");
+    dt = shmdt(ptr);
+    if(dt < 0) {
+		printf(1, "Nothing to detach! : Pass\n");
+	}
+    else{
+        printf(1,"Fail\n");
+    }
+	printf(1, "\t- Requesting Read-Only access for Read-Only region : ");
+	ptr = (char*)shmat(shmid4, (void *)(0), SHM_RDONLY);
+	if((int)ptr != -1) {
+		printf(1,"Allowed ! : Pass\n");
+	} else {
+        
+		printf(1, "Not allowed ! : Fail\n");
 	}
     printf(1, "\t- Corresponding detach : ");
     dt = shmdt(ptr);
