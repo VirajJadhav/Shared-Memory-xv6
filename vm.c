@@ -396,6 +396,7 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 struct shmRegion {
   uint key, size; // key = region key; size = number of pages, e.g. requested size = 4096 (PGSIZE), then size = 1
   int shmid;  // shmid
+  int toBeDeleted;  // flag to check if the region is marked for deletion or not. 1 = marked for deletion, 0 = not marked (default)
   void *physicalAddr[SHAREDREGIONS];  // store V2P of pages
   struct shmid_ds buffer; // kernel shmid_ds data structure associated with a region
 };
@@ -579,7 +580,25 @@ shmdt(void* shmaddr) {
     process->pages[index].size =  0;
     process->pages[index].virtualAddr = (void*)0;
     if(shmTable.allRegions[shmid].buffer.shm_nattch > 0) {
+      // decrement attaches
       shmTable.allRegions[shmid].buffer.shm_nattch -= 1;
+    } 
+    if(shmTable.allRegions[shmid].buffer.shm_nattch == 0 && shmTable.allRegions[shmid].toBeDeleted == 1) {
+      // remove the segments
+      for(int i = 0; i < shmTable.allRegions[index].size; i++) {
+        char *addr = (char *)P2V(shmTable.allRegions[index].physicalAddr[i]);
+        kfree(addr);
+        shmTable.allRegions[index].physicalAddr[i] = (void *)0;
+      }
+      shmTable.allRegions[index].size = 0;
+      shmTable.allRegions[index].key = shmTable.allRegions[index].shmid = -1;
+      shmTable.allRegions[index].toBeDeleted = 0;
+      shmTable.allRegions[index].buffer.shm_nattch = 0;
+      shmTable.allRegions[index].buffer.shm_segsz = 0;
+      shmTable.allRegions[index].buffer.shm_perm.__key = -1;
+      shmTable.allRegions[index].buffer.shm_perm.mode = 0;
+      shmTable.allRegions[index].buffer.shm_cpid = -1;
+      shmTable.allRegions[index].buffer.shm_lpid = -1;
     }
     shmTable.allRegions[shmid].buffer.shm_lpid = process->pid;
     release(&shmTable.lock);
@@ -793,18 +812,19 @@ shmctl(int shmid, int cmd, void *buf) {
           // reinitialize other values to default values
           shmTable.allRegions[index].size = 0;
           shmTable.allRegions[index].key = shmTable.allRegions[index].shmid = -1;
+          shmTable.allRegions[index].toBeDeleted = 0;
           shmTable.allRegions[index].buffer.shm_nattch = 0;
           shmTable.allRegions[index].buffer.shm_segsz = 0;
           shmTable.allRegions[index].buffer.shm_perm.__key = -1;
           shmTable.allRegions[index].buffer.shm_perm.mode = 0;
           shmTable.allRegions[index].buffer.shm_cpid = -1;
           shmTable.allRegions[index].buffer.shm_lpid = -1;
-          release(&shmTable.lock);
-          return 0;
         } else {
-          release(&shmTable.lock);
-          return -1;
+          // mark the segment to be destroyed
+          shmTable.allRegions[index].toBeDeleted = 1;
         }
+        release(&shmTable.lock);
+        return 0;
         break;
       // handle other cases
       default:
@@ -825,6 +845,7 @@ sharedMemoryInit(void) {
   for(int i = 0; i < SHAREDREGIONS; i++) {
     shmTable.allRegions[i].key = shmTable.allRegions[i].shmid = -1;
     shmTable.allRegions[i].size = 0;
+    shmTable.allRegions[i].toBeDeleted = 0;
     shmTable.allRegions[i].buffer.shm_nattch = 0;
     shmTable.allRegions[i].buffer.shm_segsz = 0;
     shmTable.allRegions[i].buffer.shm_perm.__key = -1;
