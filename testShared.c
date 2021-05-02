@@ -17,7 +17,7 @@
 
 #define allowedAddr HEAPLIMIT + 3*PGSIZE
 
-int basicSharedTest();	// Create segment, write, read and destory test
+int basicSharedTest();	// Create segment, write, read and destroy test
 void shmgetTest();	// variants of shmget
 void shmdtTest(); //variants of shmdt
 void shmctlTest();	// variants of shmctl
@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
 
 // basic shared test
 int basicSharedTest() {
-	printf(1, "* (Basic) Create segment, write, read and destory test : ");
+	printf(1, "* (Basic) Create segment, write, read and destroy test : ");
 	char *string = "Test String";
 	// get region
 	int shmid = shmget(KEY1, 2565, 06 | IPC_CREAT);
@@ -233,28 +233,27 @@ void shmatTest() {
     dt = shmdt(ptr);
     if(dt < 0) {
 		printf(1, "Fail\n");
-	}
-    else{
+	} else {
         printf(1,"Pass\n");
     }
 	printf(1, "\t- Requesting Read-Only access for Read-Only region : ");
 	ptr = (char*)shmat(shmid4, (void *)(0), SHM_RDONLY);
 	if((int)ptr != -1) {
 		printf(1,"Allowed ! : Pass\n");
-	} else {
-        
+	} else {    
 		printf(1, "Not allowed ! : Fail\n");
 	}
     printf(1, "\t- Corresponding detach : ");
     dt = shmdt(ptr);
     if(dt < 0) {
 		printf(1, "Fail\n");
-	}
-    else{
+	} else {
         printf(1,"Pass\n");
     }
     printf(1, "\t- Checking rounding down for non page-aligned address within range : ");
+	// test attachment at rounded address after sending non page-aligned address with SHM_RND flag
 	ptr = (char *)shmat(shmid, (void *)(allowedAddr + 7), SHM_RND);
+
 	if((uint)ptr == allowedAddr) {
 		printf(1,"Pass\n");
 	} else {
@@ -264,18 +263,20 @@ void shmatTest() {
     dt = shmdt(ptr);
     if(dt < 0) {
 		printf(1, "Fail\n");
-	}
-    else{
+	} else {
         printf(1,"Pass\n");
     }
     printf(1, "\t- Checking compactness of memory mappings & filling of holes: ");
     ptr = (char *)shmat(shmid, (void *)0, 0);
+
+	// attach at first available address
 	if((uint)ptr != HEAPLIMIT) {
 		printf(1, "Fail\n");
         printf(1,"%x",(uint)ptr);
         shmdt(ptr);
         goto nexttest;
 	}
+	// deliberately skip one address in between to check compactness of attachment 
     ptr2 = (char *)shmat(shmid2, (void *)(HEAPLIMIT + 2*PGSIZE), 0);
     if((uint)ptr2 != HEAPLIMIT+ 2*PGSIZE) {
 		printf(1, "Fail\n");
@@ -283,6 +284,8 @@ void shmatTest() {
         goto nexttest;
 	}
     ptr3 = (char *)shmat(shmid3, (void *)(0), 0);
+
+	// segment should be attached at the hole between the two regions previously attached
     if((uint)ptr3 == HEAPLIMIT + PGSIZE) {
 		printf(1,"Pass\n");
 	} else {
@@ -292,22 +295,19 @@ void shmatTest() {
     dt = shmdt(ptr);
     if(dt < 0) {
 		printf(1, "\t\t- Fail\n");
-	}
-    else{
+	}else {
         printf(1,"\t\t- Pass\n");
     }
     dt = shmdt(ptr2);
     if(dt < 0) {
 		printf(1, "\t\t- Fail\n");
-	}
-    else{
+	} else {
         printf(1,"\t\t- Pass\n");
     }
     dt = shmdt(ptr3);
     if(dt < 0) {
 		printf(1, "\t\t- Fail\n");
-	}
-    else {
+	} else {
         printf(1,"\t\t- Pass\n");
     }
 	nexttest: printf(1, "\t- Trying to overwrite existing mapping without SHM_REMAP flag : ");
@@ -324,6 +324,8 @@ void shmatTest() {
         goto nexttest2;
 	}
     ptr3 = (char *)shmat(shmid3, (void *)(HEAPLIMIT), 0);
+
+	// -1 should be returned as remapping isnt allowed with explicit setting of SHM_REMAP flag
     if((int)ptr3 < 0) {
 		printf(1,"Cannot Overwrite! : Pass\n");
 	} else {
@@ -334,15 +336,13 @@ void shmatTest() {
     dt = shmdt(ptr);
     if(dt < 0) {
 		printf(1, "\t\t- Fail\n");
-	}
-    else{
+	} else {
         printf(1,"\t\t- Pass\n");
     }
     dt = shmdt(ptr2);
     if(dt < 0) {
 		printf(1, "\t\t- Fail\n");
-	}
-    else{
+	} else {
         printf(1,"\t\t- Pass\n");
     }
 	nexttest2: printf(1, "\t- Trying to overwrite existing mapping with SHM_REMAP flag: ");
@@ -369,22 +369,20 @@ void shmatTest() {
     dt = shmdt(ptr);
     if(dt < 0) {
 		printf(1, "\t\t- Fail\n");
-	}
-    else{
+	} else {
         printf(1,"\t\t- Pass\n");
     }
     dt = shmdt(ptr2);
     if(dt < 0) {
 		printf(1, "\t\t- Fail\n");
-	}
-    else{
+	} else {
         printf(1,"\t\t- Pass\n");
     }
     dt = shmdt(ptr3);
+	// ptr is already detached
     if(dt < 0) {
 		printf(1, "\t\t- Pass\n");
-	}
-    else{
+	} else {
         printf(1,"\t\t- Fail\n");
     }
     nexttest3: printf(1, "\t- Trying to exhaust all regions for the process: ");
@@ -394,10 +392,10 @@ void shmatTest() {
 			break;
 		}
 	}
+	// should not allow a process to attach more than prescribed regions
 	if(i == SHAREDREGIONS) {
 		printf(1, "Pass\n");
-	}
-	else {
+	} else {
 		printf(1,"Fail\n");
 	}
 	printf(1, "\t- Corresponding detaches (%d) : \n ",i);
@@ -423,16 +421,16 @@ void shmdtTest() {
 	dt = shmdt(ptr);
     if(dt < 0) {
 		printf(1, "Fail\n");
-	}
-	else {
+	} else {
 		printf(1,"Pass\n");
 	}
 	printf(1, "\t- Trying to detach at unattached virtual address: ");
+	// try detaching address which is not previously attached
 	dt = shmdt((void*)(KERNBASE - PGSIZE));
+
     if(dt < 0) {
 		printf(1, "Pass\n");
-	}
-	else {
+	} else {
 		printf(1,"Fail\n");
 	}
 }	

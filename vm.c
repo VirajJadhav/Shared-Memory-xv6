@@ -517,31 +517,39 @@ shmget(uint key, uint size, int shmflag) {
   }  
 }
 
-int getLeastvaidx(void*curr_va, struct proc *process)
-{
+// finds the least starting address of a segment greater than curr_va which is attached 
+// to the virtual address space of the current process. Returns the index from the pages  
+// array corresponding to this address if found; -1 otherwise
+int 
+getLeastvaidx(void* curr_va, struct proc *process) {
+  
+  //maximum virtual address available in range
   void* leastva = (void*)(KERNBASE - 1);
+
   int idx = -1;
   for(int i = 0; i < SHAREDREGIONS; i++) {
-    if(process->pages[i].key != -1 && (uint)process->pages[i].virtualAddr >= (uint)curr_va && (uint)leastva >= (uint)process->pages[i].virtualAddr) {
-      
+    if(process->pages[i].key != -1 && (uint)process->pages[i].virtualAddr >= (uint)curr_va && (uint)leastva >= (uint)process->pages[i].virtualAddr) {  
+      // store address if greater than curr_va and smaller than the existing least_va.
       leastva = process->pages[i].virtualAddr;
+
       idx = i;
     }
-  }
-  
+  }  
   return idx;
 }
 
-int shmdt(void* shmaddr)
-{
+// detaches the shared memory segment starting at shmaddr from virtual address space of the process
+// returns 0 if successful and -1 in case of a failure
+int 
+shmdt(void* shmaddr) {
   acquire(&shmTable.lock);
   struct proc *process = myproc();
   void* va = (void*)0;
   uint size;
   int index,shmid;
   for(int i = 0; i < SHAREDREGIONS; i++) {
+    // find the index from pages array which is attached at the provided shmaddr
     if(process->pages[i].key != -1 && process->pages[i].virtualAddr == shmaddr) {
-        //cprintf("%x\n",(uint)shmaddr);
         va =  process->pages[i].virtualAddr;
         index = i;
         shmid = process->pages[i].shmid;
@@ -549,10 +557,8 @@ int shmdt(void* shmaddr)
         break;
     }
   }
-  if(va)
-  {
-    for(int i = 0; i < size; i++)
-    {
+  if(va) {
+    for(int i = 0; i < size; i++) {
       pte_t* pte = walkpgdir(process->pgdir, (void*)((uint)va + i*PGSIZE), 0);
       if(pte == 0) {
         release(&shmTable.lock);
@@ -576,17 +582,12 @@ int shmdt(void* shmaddr)
   }
   
 }
-  
-/*
-  TODO:
-    1. Some more error checks.
-    2. Error check for request with more than 64 pages?
-*/
+
+// attaches shared memory segment identified by shmid to the virtual address shmaddr 
+// if provided; otherwise attach at the first fitting address 
 void*
-shmat(int shmid, void* shmaddr, int shmflag)
-{
-  if(shmid < 0 || shmid > 64)
-  {
+shmat(int shmid, void* shmaddr, int shmflag) {
+  if(shmid < 0 || shmid > 64) {
     return (void*)-1;
   }
   acquire(&shmTable.lock);
@@ -595,57 +596,47 @@ shmat(int shmid, void* shmaddr, int shmflag)
   void *va = (void*)HEAPLIMIT, *least_va;
   struct proc *process = myproc();
   index = shmTable.allRegions[shmid].shmid;
-  if(index == -1)
-  {
+  if(index == -1) {
     // shmid not found
     release(&shmTable.lock);
     return (void*)-1;
   }
-  if(shmaddr)
-  {
-      if((uint)shmaddr >= KERNBASE || (uint)shmaddr < HEAPLIMIT){
+  if(shmaddr) {
+      if((uint)shmaddr >= KERNBASE || (uint)shmaddr < HEAPLIMIT) {
         release(&shmTable.lock);
         return (void*)-1;
       }
-      uint rounded = ((uint)shmaddr & ~(SHMLBA-1));  // round down to nearest multiple of shmlba 
-      if(shmflag & SHM_RND)
-      {
-        if(!rounded)
-        {
+      // round down to nearest multiple of SHMLBA
+      uint rounded = ((uint)shmaddr & ~(SHMLBA-1));  
+
+      if(shmflag & SHM_RND) {
+        if(!rounded) {
           release(&shmTable.lock);
           return (void*)-1;
         }
         va = (void*)rounded;
-      }
-      else
-      {
-        if(rounded == (uint)shmaddr) // page aligned address
-        {
+      } else {
+
+        // page aligned address
+        if(rounded == (uint)shmaddr) {  
           va = shmaddr;    
         }
       }
       
-  }
-  else
-  {    
-    for(int i = 0; i < SHAREDREGIONS; i++)
-    {
+  } else {    
+    for(int i = 0; i < SHAREDREGIONS; i++) {
       idx = getLeastvaidx(va,process);
-      if(idx != -1)
-      {
+      if(idx != -1) {
         least_va = process->pages[idx].virtualAddr;
         if((uint)va + shmTable.allRegions[index].size*PGSIZE <=  (uint)least_va)        
           break;
         else
           va = (void*)((uint)least_va + process->pages[idx].size*PGSIZE);
-      }
-      else 
+      } else 
         break;
-
     }
   }
-  if((uint)va + shmTable.allRegions[index].size*PGSIZE >= KERNBASE )
-  {
+  if((uint)va + shmTable.allRegions[index].size*PGSIZE >= KERNBASE) {
     // size exceeded
     release(&shmTable.lock);
     return (void*)-1;
@@ -657,30 +648,24 @@ shmat(int shmid, void* shmaddr, int shmflag)
         break;
       }
   }
-  if (idx != -1)
-  {
-    if(shmflag & SHM_REMAP)
-    {
+  if(idx != -1) {
+    if(shmflag & SHM_REMAP) {
       segment = (uint)process->pages[idx].virtualAddr;
-      while(segment < (uint)va + shmTable.allRegions[index].size*PGSIZE)
-      { 
+      // repeat till all conflicting mappings are removed
+      while(segment < (uint)va + shmTable.allRegions[index].size*PGSIZE) { 
         size = process->pages[idx].size;
         release(&shmTable.lock);
-        if(shmdt((void*)segment) == -1)
-        {
+        if(shmdt((void*)segment) == -1) {
           release(&shmTable.lock);
           return (void*)-1;
         }
-        acquire(&shmTable.lock);
-        
+        acquire(&shmTable.lock);        
         idx = getLeastvaidx((void*)(segment + size*PGSIZE),process);
         if(idx == -1)
           break;
         segment = (uint)process->pages[idx].virtualAddr;
       }
-    }
-    else
-    {
+    } else {
       release(&shmTable.lock);
       return (void*)-1;
     }
@@ -691,25 +676,21 @@ shmat(int shmid, void* shmaddr, int shmflag)
   }
   else if (shmTable.allRegions[index].buffer.shm_perm.mode == RW_SHM) {
     permflag = PTE_W | PTE_U;
-  }
-  else {
+  } else {
     //permission mismatch between get and attach
     release(&shmTable.lock);
     return (void*)-1;
   }
   for (int k = 0; k < shmTable.allRegions[index].size; k++) {
-		if(mappages(process->pgdir, (void*)((uint)va + (k*PGSIZE)), PGSIZE, (uint)shmTable.allRegions[index].physicalAddr[k], permflag) < 0)
-    {
+		if(mappages(process->pgdir, (void*)((uint)va + (k*PGSIZE)), PGSIZE, (uint)shmTable.allRegions[index].physicalAddr[k], permflag) < 0) {
       deallocuvm(process->pgdir,(uint)va,(uint)(va + shmTable.allRegions[index].size));
       release(&shmTable.lock);
       return (void*)-1;
     }
 	}
   idx = -1;
-  for(int i = 0; i < SHAREDREGIONS; i++)
-  {
-    if(process->pages[i].key == -1)
-    {
+  for(int i = 0; i < SHAREDREGIONS; i++) {
+    if(process->pages[i].key == -1) {
       idx = i;
       break;
     }
@@ -718,12 +699,11 @@ shmat(int shmid, void* shmaddr, int shmflag)
     process->pages[idx].shmid = shmid;  
     process->pages[idx].virtualAddr = va;
     process->pages[idx].key = shmTable.allRegions[index].key;
-    process->pages[idx].size =  shmTable.allRegions[index].size;
+    process->pages[idx].size = shmTable.allRegions[index].size;
     process->pages[idx].perm = permflag;
     shmTable.allRegions[index].buffer.shm_nattch += 1;
     shmTable.allRegions[index].buffer.shm_lpid = process->pid;
-  }
-  else {
+  } else {
     release(&shmTable.lock);
     return (void*)-1; // all page regions exhausted
   }

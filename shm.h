@@ -6,7 +6,7 @@
 // flag for shmctl
 #define SHM_STAT 13
 
-#define	SHMLBA	(1 * PGSIZE)
+#define	SHMLBA	(1 * PGSIZE) /* multiple of PGSIZE */
 
 // read, write
 #define READ_SHM 04
