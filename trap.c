@@ -83,7 +83,21 @@ trap(struct trapframe *tf)
       handled, while writing into a region with read-only access
   */
   case 14:
-    cprintf("Segmentation fault (Core dumped)\n");
+    if(strncmp(myproc()->name, "testShared", strlen(myproc()->name)) != 0) {
+      if(myproc() == 0 || (tf->cs&3) == 0){
+        // In kernel, it must be our mistake.
+        cprintf("unexpected trap %d from cpu %d eip %x (cr2=0x%x)\n",
+                tf->trapno, cpuid(), tf->eip, rcr2());
+        panic("trap");
+      }
+      // In user space, assume process misbehaved.
+      cprintf("pid %d %s: trap %d err %d on cpu %d "
+              "eip 0x%x addr 0x%x--kill proc\n",
+              myproc()->pid, myproc()->name, tf->trapno,
+              tf->err, cpuid(), tf->eip, rcr2());
+    } else {
+      cprintf("Segmentation fault (Core dumped) - Trap 14\n");
+    }
     myproc()->killed = 1;
     break;
 

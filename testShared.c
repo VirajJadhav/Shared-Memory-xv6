@@ -21,7 +21,7 @@ void shmgetTest();	// variants of shmget
 void shmdtTest(); //variants of shmdt
 void shmctlTest();	// variants of shmctl
 void shmatTest(); // variants of shmat
-void permissionTest();
+void permissionTest();	// tests for permissions on shared memory region
 int forkTest();		// Two forks, parent write, child-1 write, child-2 write, parent read (parent attach)
 
 int main(int argc, char *argv[]) {
@@ -206,22 +206,6 @@ void shmatTest() {
     else{
         printf(1,"Pass\n");
     }
-	// printf(1, "\t- Requesting Read-Write access for Read-Only region : ");
-	// ptr = (char*)shmat(shmid4, (void *)(0), 0);
-	// if((int)ptr < 0) {
-	// 	printf(1,"Not allowed ! : Pass\n");
-	// } else {
-        
-	// 	printf(1, "Allowed ! : Fail\n");
-	// }
-    // printf(1, "\t- Corresponding detach : ");
-    // dt = shmdt(ptr);
-    // if(dt < 0) {
-	// 	printf(1, "Nothing to detach! : Pass\n");
-	// }
-    // else{
-    //     printf(1,"Fail\n");
-    // }
 	printf(1, "\t- Requesting Read-Only access for Read-Only region : ");
 	ptr = (char*)shmat(shmid4, (void *)(0), SHM_RDONLY);
 	if((int)ptr != -1) {
@@ -489,6 +473,7 @@ void shmctlTest() {
 void permissionTest() {
 	printf(1, "* Tests for combinations of region permissions :\n");
 	printf(1, "\t- Write into a read-write region : ");
+	char testChar = 'a';
 	int shmid = shmget(KEY3, 2565, 06 | IPC_CREAT);
 	if(shmid < 0) {
 		printf(1, "Fail\n");
@@ -499,7 +484,7 @@ void permissionTest() {
 		printf(1, "Fail\n");
 		return;
 	}
-	ptr[0] = 'a';
+	ptr[0] = testChar;
 	int dt = shmdt(ptr);
 	if(dt < 0) {
 		printf(1, "Fail\n");
@@ -509,13 +494,29 @@ void permissionTest() {
 	/* 
 		change region mode to read-only	
 	*/
-	// struct shmid_ds buffer;
-	// buffer.shm_perm.mode = 04;
-	// int ctl = shmctl(shmid, IPC_SET, &buffer);
-	// if(ctl < 0) {
-	// 	printf(1, "Fail\n");
-	// 	return;
-	// }
+	struct shmid_ds buffer;
+	buffer.shm_perm.mode = 04;
+	int ctl = shmctl(shmid, IPC_SET, &buffer);
+	if(ctl < 0) {
+		printf(1, "Fail\n");
+		return;
+	}
+	printf(1, "\t- Read from a read-only region : ");
+	ptr = (char *)shmat(shmid, (void *)0, 0);
+	if((int)ptr < 0) {
+		printf(1, "Fail\n");
+		return;
+	}
+	if(ptr[0] != testChar) {
+		printf(1, "Fail\n");
+		return;
+	}
+	dt = shmdt(ptr);
+	if(dt < 0) {
+		printf(1, "Fail\n");
+		return;
+	}
+	printf(1, "Pass\n");
 	// printf(1, "\t- Write into a read-only region : ");
 	// ptr = (char *)shmat(shmid, (void *)0, 0);
 	// if((int)ptr < 0) {
