@@ -392,19 +392,27 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 
 // Shared memory
 
+// structure of single shared memory region
 struct shmRegion {
-  uint key, size;
-  int shmid;
-  void *physicalAddr[SHAREDREGIONS];
-  struct shmid_ds buffer;
+  uint key, size; // key = region key; size = number of pages, e.g. requested size = 4096 (PGSIZE), then size = 1
+  int shmid;  // shmid
+  void *physicalAddr[SHAREDREGIONS];  // store V2P of pages
+  struct shmid_ds buffer; // kernel shmid_ds data structure associated with a region
 };
 
+// shared memory table
 struct shmTable {
+  // lock for table
   struct spinlock lock;
+  // total shared memory regions
   struct shmRegion allRegions[SHAREDREGIONS];
 } shmTable;
 
 
+/*
+  Creates a shared memory region with given key,
+  and size depending upon flag provided
+*/
 int
 shmget(uint key, uint size, int shmflag) {
   // as Xv6 has only single user, else lower 9 bits would be considered
@@ -711,6 +719,11 @@ shmat(int shmid, void* shmaddr, int shmflag) {
   return va;
 }
 
+/*
+  Controls the shared memory regions corresponding to shmid,
+  depending upon the cmd (command) provided and buf parameter,
+  which is user equivalent of shmid_ds data structure
+*/
 int
 shmctl(int shmid, int cmd, void *buf) {
   // check shmid bound
