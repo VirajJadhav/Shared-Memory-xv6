@@ -6,6 +6,7 @@
 #include "shm.h"
 #include "memlayout.h"
 
+// test keys
 #define KEY1 2000
 #define KEY2 4000
 #define KEY3 7777
@@ -25,14 +26,27 @@ void permissionTest();	// tests for permissions on shared memory region
 int forkTest();		// Two forks, parent write, child-1 write, child-2 write, parent read (parent attach)
 
 int main(int argc, char *argv[]) {
+	/*
+		Basic shared memory test,
+		create region - write - read - remove region
+	*/
     if(basicSharedTest() < 0) {
 		printf(1, "failed\n");
 	}
+	// tests for different variants of shmget, w.r.t shmget flags
 	shmgetTest();
+	// tests for different variants of shmat, w.r.t shmat flags
 	shmatTest();
+	// tests for different variants of shmdt, w.r.t shmdt flags
 	shmdtTest();
+	// tests for different variants of shmctl, w.r.t shmctl flags
 	shmctlTest();
+	// tests for of different permissions on regions
 	permissionTest();
+	/* 
+		test for fork,
+		parent (attach) - parent write - child 1 write - child 2 write - parent read and verify - parent detach
+	*/
 	if(forkTest() < 0) {
 		printf(1, "failed\n");
 	}
@@ -40,41 +54,48 @@ int main(int argc, char *argv[]) {
     exit();
 }
 
+// basic shared test
 int basicSharedTest() {
 	printf(1, "* (Basic) Create segment, write, read and destory test : ");
 	char *string = "Test String";
+	// get region
 	int shmid = shmget(KEY1, 2565, 06 | IPC_CREAT);
 	if(shmid < 0) {
 		return -1;
 	}
+	// attach to shmid's region
 	char *ptr = (char *)shmat(shmid, (void *)0, 0);
 	if((int)ptr < 0) {
 		return -1;
 	}
+	// write into region
 	for(int i = 0; string[i] != 0; i++) {
 		ptr[i] = string[i];
 	}
-
+	// detach
 	int dt = shmdt(ptr);
 	if(dt < 0) {
 		return -1;
 	}
 
+	// re-attach for verification
 	ptr = (char *)shmat(shmid, (void *)0, 0);
 	if((int)ptr < 0) {
 		return -1;
 	}
 
+	// read, written data
 	for(int i = 0; string[i] != 0; i++) {
 		if(ptr[i] != string[i]) {
 			return -1;
 		}
 	}
-
+	// detach
 	dt = shmdt(ptr);
 	if(dt < 0) {
 		return -1;
 	}
+	// remove region
 	int ctl = shmctl(shmid, IPC_RMID, (void *)0);
 	if(ctl < 0) {
 		return -1;
@@ -83,16 +104,19 @@ int basicSharedTest() {
 	return 0;
 }
 
+// variants of shmget
 void shmgetTest() {
 	printf(1, "* Tests for variants of shmget :\n");
 	printf(1, "\t- To check negative key input : ");
+	// negative key
 	int shmid = shmget(-1, 5000, 06 | IPC_CREAT);
 	if(shmid < 0) {
 		printf(1, "Pass\n");
 	} else {
 		printf(1, "Fail\n");
 	}
-	printf(1, "\t- Region permission other than Read / Read-Write : ");
+	printf(1, "\t- Region permission other than Read / Read-Write (no permissions) : ");
+	// invalid permission check
 	shmid = shmget(KEY1, 4000, IPC_CREAT);
 	if(shmid < 0) {
 		printf(1, "Pass\n");
@@ -100,6 +124,7 @@ void shmgetTest() {
 		printf(1, "Fail\n");
 	}
 	printf(1, "\t- Requesting region with more than decided pages ( > 64) : ");
+	// more than allowed size
 	shmid = shmget(KEY1, 1.6e+7 + 40, 06 | IPC_CREAT);
 	if(shmid < 0) {
 		printf(1, "Pass\n");
@@ -107,6 +132,7 @@ void shmgetTest() {
 		printf(1, "Fail\n");
 	}
 	printf(1, "\t- Requesting region with zero size : ");
+	// empty region
 	shmid = shmget(KEY1, 0, 06 | IPC_CREAT);
 	if(shmid < 0) {
 		printf(1, "Pass\n");
@@ -114,6 +140,7 @@ void shmgetTest() {
 		printf(1, "Fail\n");
 	}
 	printf(1, "\t- Check for creation of valid region with IPC_CREAT : ");
+	// IPC_CREAT
 	shmid = shmget(KEY1, 2000, 06 | IPC_CREAT);
 	if(shmid < 0) {
 		printf(1, "Fail\n");
@@ -121,6 +148,7 @@ void shmgetTest() {
 		printf(1, "Pass\n");
 	}
 	printf(1, "\t- Check for retrieving previously created region's shmid : ");
+	// get existing region shmid
 	int prevShmid = shmget(KEY1, 2000, 0);
 	if(prevShmid == shmid) {
 		printf(1, "Pass\n");
@@ -128,6 +156,7 @@ void shmgetTest() {
 		printf(1, "Fail\n");
 	}
 	printf(1, "\t- Check for creation of valid region with IPC_PRIVATE : ");
+	// IPC_PRIVATE
 	shmid = shmget(IPC_PRIVATE, 2000, 06);
 	if(shmid < 0) {
 		printf(1, "Fail\n");
@@ -142,6 +171,7 @@ void shmgetTest() {
 		printf(1, "Fail\n");
 	}
 	printf(1, "\t- Check for IPC_EXCL alone, without IPC_CREAT : ");
+	// Only IPC_EXCL
 	shmid = shmget(KEY2, 0, 06 | IPC_EXCL);
 	if(shmid < 0) {
 		printf(1, "Pass\n");
@@ -150,6 +180,7 @@ void shmgetTest() {
 	}
 }
 
+// variants of shmat
 void shmatTest() {  
     int dt,i;
     char *ptr,*ptr2,*ptr3,*ptrarr[100];
@@ -381,6 +412,7 @@ void shmatTest() {
 	ret: return;
 }
 
+// variants of shmdt
 void shmdtTest() {
 	int dt,shmid;
 	char* ptr;
@@ -405,6 +437,7 @@ void shmdtTest() {
 	}
 }	
 
+// variants of shmctl
 void shmctlTest() {
 	printf(1, "* Tests for variants of shmctl :\n");
 	char *string = "Test string";
@@ -427,6 +460,7 @@ void shmctlTest() {
 		return;
 	}
 	printf(1, "\t- Destroy / Remove (IPC_RMID) non - existing region : ");
+	// remove non - existing region
 	int ctl = shmctl(55555, IPC_RMID, (void *)0);
 	if(ctl < 0) {
 		printf(1, "Pass\n");
@@ -434,6 +468,7 @@ void shmctlTest() {
 		printf(1, "Fail\n");
 	}
 
+	// user shmid_ds data structure
 	struct shmid_ds bufferCheck;
 	printf(1, "\t- Test IPC_STAT / SHM_STAT flags : ");
 	ctl = shmctl(shmid, IPC_STAT, &bufferCheck);
@@ -442,9 +477,10 @@ void shmctlTest() {
 	} else {
 		printf(1, "Pass\n");
 	}
-
+	// change permission to read-only
 	bufferCheck.shm_perm.mode = 04;
 	printf(1, "\t- Test IPC_SET flag (change region mode to Read) : ");
+	// set read-only permission to exisiting region
 	ctl = shmctl(shmid, IPC_SET, &bufferCheck);
 	if(ctl < 0) {
 		printf(1, "Fail\n");
@@ -454,6 +490,7 @@ void shmctlTest() {
 
 	bufferCheck.shm_perm.mode = 567;
 	printf(1, "\t- Test IPC_SET flag (change region mode to a random number) : ");
+	// try setting random permission
 	ctl = shmctl(shmid, IPC_SET, &bufferCheck);
 	if(ctl < 0) {
 		printf(1, "Pass\n");
@@ -462,6 +499,7 @@ void shmctlTest() {
 	}
 
 	printf(1, "\t- Destroy / Remove (IPC_RMID) existing region : ");
+	// remove existing region
 	ctl = shmctl(shmid, IPC_RMID, (void *)0);
 	if(ctl < 0) {
 		printf(1, "Fail\n");
@@ -470,11 +508,20 @@ void shmctlTest() {
 	}
 }
 
+// combinations of different permissions on region
 void permissionTest() {
 	printf(1, "* Tests for combinations of region permissions :\n");
+	printf(1, "\t- Region permission other than Read / Read-Write : ");
+	// invalid permission check
+	int shmid = shmget(KEY1, 4000, 26 | IPC_CREAT);
+	if(shmid < 0) {
+		printf(1, "Pass\n");
+	} else {
+		printf(1, "Fail\n");
+	}
 	printf(1, "\t- Write into a read-write region : ");
 	char testChar = 'a';
-	int shmid = shmget(KEY3, 2565, 06 | IPC_CREAT);
+	shmid = shmget(KEY3, 2565, 06 | IPC_CREAT);
 	if(shmid < 0) {
 		printf(1, "Fail\n");
 		return;
@@ -536,17 +583,22 @@ void permissionTest() {
 	// }
 }
 
+// 2 fork test
 int forkTest() {
-	printf(1, "* 2 Forks (Parent attach; parent-child1-child2 write; parent read) : ");
+	printf(1, "* 2 Forks (Parent attach; parent-child 1-child 2 write; parent read) : ");
+	// test string
 	char *string = "AAAAABBBBBCCCCC";
+	// create
 	int shmid = shmget(KEY1, 2565, 06 | IPC_CREAT);
 	if(shmid < 0) {
 		return -1;
 	}
+	// attach
 	char *ptr = (char *)shmat(shmid, (void *)0, 0);
 	if((int)ptr < 0) {
 		return -1;
 	}
+	// parent-write
 	for(int i = 0; i < 5; i++) {
 		ptr[i] = string[i];
 	}
@@ -558,26 +610,31 @@ int forkTest() {
 		if(pid1 < 0) {
 			return -1;
 		} else if(pid1 == 0) {
+			// child 2-write
 			for(int i = 5; i < 10; i++) {
 				ptr[i] = string[i];
 			}
 		} else {
 			wait();
+			// child 1-write
 			for(int i = 10; string[i] != 0; i++) {
 				ptr[i] = string[i];
 			}
 		}
 	} else {
 		wait();
+		// parent read-verify
 		for(int i = 0; string[i] != 0; i++) {
 			if(ptr[i] != string[i]) {
 				return -1;
 			}
 		}
+		// detach
 		int dt = shmdt(ptr);
 		if(dt < 0) {
 			return -1;
 		}
+		// remove
 		int ctl = shmctl(shmid, IPC_RMID, (void *)0);
 		if(ctl < 0) {
 			return -1;

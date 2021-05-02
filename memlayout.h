@@ -10,7 +10,7 @@
 
 // Shared memory macros
 #define HEAPLIMIT 0x7F000000 // 16MB from this limit -> KERNBASE
-#define SHAREDREGIONS 64
+#define SHAREDREGIONS 64    // maximum shared regions allowed
 
 #define V2P(a) (((uint) (a)) - KERNBASE)
 #define P2V(a) ((void *)(((char *) (a)) + KERNBASE))

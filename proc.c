@@ -112,8 +112,9 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
-  // Initialise shared pages
+  // Initialise shared pages, while allocating proc
   for(int i = 0; i < SHAREDREGIONS; i++) {
+    // default values
     p->pages[i].key = -1;
     p->pages[i].shmid = -1;
     p->pages[i].size  = 0;
@@ -225,8 +226,10 @@ fork(void)
   for(int i = 0; i < SHAREDREGIONS; i++) {
     if(curproc->pages[i].key != -1 && curproc->pages[i].shmid != -1) {
       np->pages[i] = curproc->pages[i];
+      // get valid shmid index in shmtable-allRegions struct
       int index = getShmidIndex(np->pages[i].shmid);
       if(index != -1) {
+        // map them to child's address space
         mappagesWrapper(np, index, i);
       }
     }
@@ -262,8 +265,10 @@ exit(void)
     }
   }
 
+  // detach, attached shared regions
   for(int i = 0; i < SHAREDREGIONS; i++) {
     if(curproc->pages[i].shmid != -1 && curproc->pages[i].key != -1) {
+      // wrapper that calls detach
       shmdtWrapper(curproc->pages[i].virtualAddr);
     }
   }

@@ -412,6 +412,7 @@ shmget(uint key, uint size, int shmflag) {
 
   acquire(&shmTable.lock);
   
+  // separate correct permissions and shmflag
   if(lowerBits == (int)READ_SHM) {
     permission = READ_SHM;
     shmflag ^= READ_SHM;
@@ -425,6 +426,7 @@ shmget(uint key, uint size, int shmflag) {
       return -1;
     }
   }
+  // check for requested size
   if(size <= 0) {
     release(&shmTable.lock);
     return -1;
@@ -440,16 +442,20 @@ shmget(uint key, uint size, int shmflag) {
   // check if key already exists
   for(int i = 0; i < SHAREDREGIONS; i++) {
     if(shmTable.allRegions[i].key == key) {
+      // if wrong size is requested with existing region
       if(shmTable.allRegions[i].size != noOfPages) {
         release(&shmTable.lock);
         return -1;
       }
+      // IPC_CREAT | IPC_EXCL, for region that exists
       if(shmflag == (IPC_CREAT | IPC_EXCL)) {
         release(&shmTable.lock);
         return -1;
       }
+      // get region permissions
       int checkPerm = shmTable.allRegions[i].buffer.shm_perm.mode;
       if(checkPerm == READ_SHM || checkPerm == RW_SHM) {
+        // condition for IPC_PRIVATE, with existing region
         if((shmflag == 0) && (key != IPC_PRIVATE)) {
           release(&shmTable.lock);
           return shmTable.allRegions[i].shmid;
@@ -484,6 +490,7 @@ shmget(uint key, uint size, int shmflag) {
         release(&shmTable.lock);
         return -1;
       }
+      // zero out
       memset(newPage, 0, PGSIZE);
       shmTable.allRegions[index].physicalAddr[i] = (void *)V2P(newPage);
     }
@@ -491,20 +498,19 @@ shmget(uint key, uint size, int shmflag) {
     shmTable.allRegions[index].size = noOfPages;
     shmTable.allRegions[index].key = key;
 
+    // store data for shmid_ds data structure
     shmTable.allRegions[index].buffer.shm_segsz = size;
     shmTable.allRegions[index].buffer.shm_perm.__key = key;
     shmTable.allRegions[index].buffer.shm_perm.mode = permission;
 
     // store creator pid
     shmTable.allRegions[index].buffer.shm_cpid = myproc()->pid;
-
-    int shmid = index;
     
     // store shmid in not yet shared region
-    shmTable.allRegions[index].shmid = shmid;
+    shmTable.allRegions[index].shmid = index;
 
     release(&shmTable.lock);
-    return shmid;
+    return index; // valid shmid
   } else {
     release(&shmTable.lock);
     return -1;
@@ -588,14 +594,7 @@ shmat(int shmid, void* shmaddr, int shmflag)
   uint segment,size = 0;
   void *va = (void*)HEAPLIMIT, *least_va;
   struct proc *process = myproc();
-  for(int i = 0; i < SHAREDREGIONS; i++) 
-  {
-    if(shmTable.allRegions[i].shmid == shmid)
-    {
-      index = i;
-      break;
-    }  
-  }
+  index = shmTable.allRegions[shmid].shmid;
   if(index == -1)
   {
     // shmid not found
@@ -734,6 +733,7 @@ shmat(int shmid, void* shmaddr, int shmflag)
 
 int
 shmctl(int shmid, int cmd, void *buf) {
+  // check shmid bound
   if(shmid < 0 || shmid > 64){
     return -1;
   }
@@ -743,18 +743,16 @@ shmctl(int shmid, int cmd, void *buf) {
   struct shmid_ds *buffer = (struct shmid_ds *)buf;
 
   int index = -1;
-  for(int i = 0; i < SHAREDREGIONS; i++) {
-    if(shmTable.allRegions[i].shmid == shmid) {
-      index = i;
-      break;
-    }
-  }
+  index = shmTable.allRegions[shmid].shmid;
+  // check for valid shmid
   if(index == -1) {
     release(&shmTable.lock);
     return -1;
   } else {
+    // get permissions on region with provided shmid
     int checkPerm = shmTable.allRegions[index].buffer.shm_perm.mode;
     switch(cmd) {
+      // handle IPC_SET flag, to set values from user data structure to kernel data structure
       case IPC_SET:
         if(buffer) {
           if((buffer->shm_perm.mode == READ_SHM) || (buffer->shm_perm.mode == RW_SHM)) {
@@ -770,8 +768,13 @@ shmctl(int shmid, int cmd, void *buf) {
           return -1;
         }
         break;
+      /* 
+        handle SHM_STAT and IPC_STAT flag,
+        both will have same check on xv6 as there is only a single user
+      */
       case SHM_STAT:
       case IPC_STAT:
+        // check valid permissions
         if(buffer && (checkPerm == READ_SHM || checkPerm == RW_SHM)) {
           buffer->shm_nattch = shmTable.allRegions[index].buffer.shm_nattch;
           buffer->shm_segsz = shmTable.allRegions[index].buffer.shm_segsz;
@@ -786,6 +789,7 @@ shmctl(int shmid, int cmd, void *buf) {
           return -1;
         }
         break;
+      // handle IPC_RMID flag, to remove shared memory region associated with give shmid
       case IPC_RMID:
         if(shmTable.allRegions[index].buffer.shm_nattch == 0) {
           for(int i = 0; i < shmTable.allRegions[index].size; i++) {
@@ -793,6 +797,7 @@ shmctl(int shmid, int cmd, void *buf) {
             kfree(addr);
             shmTable.allRegions[index].physicalAddr[i] = (void *)0;
           }
+          // reinitialize other values to default values
           shmTable.allRegions[index].size = 0;
           shmTable.allRegions[index].key = shmTable.allRegions[index].shmid = -1;
           shmTable.allRegions[index].buffer.shm_nattch = 0;
@@ -808,6 +813,7 @@ shmctl(int shmid, int cmd, void *buf) {
           return -1;
         }
         break;
+      // handle other cases
       default:
         release(&shmTable.lock);
         return -1;
@@ -816,10 +822,13 @@ shmctl(int shmid, int cmd, void *buf) {
   } 
 }
 
+// to initialize shared memory table
 void
 sharedMemoryInit(void) {
+  // initialize shmtable lock
   initlock(&shmTable.lock, "Shared Memory");
   acquire(&shmTable.lock);
+  // initialize all shmtable values
   for(int i = 0; i < SHAREDREGIONS; i++) {
     shmTable.allRegions[i].key = shmTable.allRegions[i].shmid = -1;
     shmTable.allRegions[i].size = 0;
@@ -836,18 +845,13 @@ sharedMemoryInit(void) {
   release(&shmTable.lock);
 }
 
+// to return shmid index from shmtable
 int
 getShmidIndex(int shmid) {
-  acquire(&shmTable.lock);
-  int index = -1;
-  for(int i = 0; i < SHAREDREGIONS; i++) {
-    if(shmTable.allRegions[i].shmid == shmid) {
-      index = i;
-      break;
-    }
+  if(shmid < 0 || shmid > 64) {
+    return -1;
   }
-  release(&shmTable.lock);
-  return index;
+  return shmTable.allRegions[shmid].shmid;
 }
 
 void mappagesWrapper(struct proc *process, int shmIndex, int index) {
@@ -861,6 +865,7 @@ void mappagesWrapper(struct proc *process, int shmIndex, int index) {
 }
 
 void shmdtWrapper(void *addr) {
+  // call shmdt
   shmdt(addr);
 }
 

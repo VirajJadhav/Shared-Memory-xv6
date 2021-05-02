@@ -22,6 +22,6 @@ struct shmid_ds {
   struct ipc_perm shm_perm;
   uint shm_segsz; // size of segment in bytes
   int shm_nattch; // current attaches
-  int shm_cpid;
-  int shm_lpid;
+  int shm_cpid; // region's creator pid
+  int shm_lpid; // last attach / detach
 };
