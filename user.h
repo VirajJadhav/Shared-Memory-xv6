@@ -24,6 +24,7 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 
+// shared memory
 int shmget(uint, uint, int);
 int shmat(int, void*, int);
 int shmdt(void*);

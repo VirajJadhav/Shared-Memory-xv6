@@ -93,11 +93,16 @@ sys_uptime(void)
 // Shared memory
 
 extern int shmget(uint, uint, int);
+extern int shmdt(void*);
+extern void * shmat(int, void*, int);
+extern int shmctl(int, int, void*);
 
+// system call handler for shmget
 int
 sys_shmget(void)
 {
   int key, size, shmflag;
+  // check for valid arguments
   if(argint(0, &key) < 0)
     return -1;
   if(argint(1, &size) < 0)
@@ -107,24 +112,23 @@ sys_shmget(void)
   return shmget((uint)key, (uint)size, shmflag);
 }
 
-extern int shmdt(void*);
-
+// system call handler for shmdt
 int sys_shmdt(void)
 {
   int i;
+  // check for valid argument
   if(argint(0,&i)<0)
     return 0;
   return shmdt((void*)i);
 }
 
-extern void * shmat(int, void*, int);
-
-
+// system call handler for shmat
 void*
 sys_shmat(void)
 {
   int shmid, shmflag;
   int i;
+  // check for valid arguments
   if(argint(0, &shmid) < 0)
     return (void*)0;
   if(argint(1,&i)<0)
@@ -134,12 +138,12 @@ sys_shmat(void)
   return shmat(shmid, (void*)i, shmflag);
 }
 
-extern int shmctl(int, int, void*);
-
+// system call handler for shmctl
 int
 sys_shmctl(void)
 {
   int shmid, cmd, buf;
+  // check for valid arguments
   if(argint(0, &shmid) < 0)
     return -1;
   if(argint(1, &cmd) < 0)

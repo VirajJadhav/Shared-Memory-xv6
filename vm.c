@@ -629,26 +629,26 @@ shmat(int shmid, void* shmaddr, int shmflag) {
     return (void*)-1;
   }
   if(shmaddr) {
-      if((uint)shmaddr >= KERNBASE || (uint)shmaddr < HEAPLIMIT) {
+    if((uint)shmaddr >= KERNBASE || (uint)shmaddr < HEAPLIMIT) {
+      release(&shmTable.lock);
+      return (void*)-1;
+    }
+    // round down to nearest multiple of SHMLBA
+    uint rounded = ((uint)shmaddr & ~(SHMLBA-1));  
+
+    if(shmflag & SHM_RND) {
+      if(!rounded) {
         release(&shmTable.lock);
         return (void*)-1;
       }
-      // round down to nearest multiple of SHMLBA
-      uint rounded = ((uint)shmaddr & ~(SHMLBA-1));  
+      va = (void*)rounded;
+    } else {
 
-      if(shmflag & SHM_RND) {
-        if(!rounded) {
-          release(&shmTable.lock);
-          return (void*)-1;
-        }
-        va = (void*)rounded;
-      } else {
-
-        // page aligned address
-        if(rounded == (uint)shmaddr) {  
-          va = shmaddr;    
-        }
+      // page aligned address
+      if(rounded == (uint)shmaddr) {  
+        va = shmaddr;    
       }
+    }
       
   } else {    
     for(int i = 0; i < SHAREDREGIONS; i++) {
@@ -670,10 +670,10 @@ shmat(int shmid, void* shmaddr, int shmflag) {
   }
   idx = -1;
   for(int i = 0; i < SHAREDREGIONS; i++) {
-      if(process->pages[i].key != -1 && (uint)process->pages[i].virtualAddr + process->pages[i].size*PGSIZE > (uint)va && (uint)va >= (uint)process->pages[i].virtualAddr)  {
-        idx = i;
-        break;
-      }
+    if(process->pages[i].key != -1 && (uint)process->pages[i].virtualAddr + process->pages[i].size*PGSIZE > (uint)va && (uint)va >= (uint)process->pages[i].virtualAddr)  {
+      idx = i;
+      break;
+    }
   }
   if(idx != -1) {
     if(shmflag & SHM_REMAP) {

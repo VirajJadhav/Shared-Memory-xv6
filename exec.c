@@ -93,6 +93,9 @@ exec(char *path, char **argv)
       last = s+1;
   safestrcpy(curproc->name, last, sizeof(curproc->name));
 
+  /*
+    Detach shared region segments
+  */
   for(int i = 0; i < SHAREDREGIONS; i++) {
     if(curproc->pages[i].shmid != -1 && curproc->pages[i].key != -1) {
       shmdtWrapper(curproc->pages[i].virtualAddr);

@@ -562,7 +562,17 @@ void permissionTest() {
 		return;
 	}
 	printf(1, "Pass\n");
+	ctl = shmctl(shmid, IPC_RMID, (void *)0);
+	if(ctl < 0) {
+		printf(1, "Fail\n");
+		return;
+	}
 	// printf(1, "\t- Write into a read-only region : ");
+	// shmid = shmget(KEY7, 3000, 04 | IPC_CREAT);
+	// if(shmid < 0) {
+	// 	printf(1, "Fail\n");
+	// 	return;
+	// }
 	// ptr = (char *)shmat(shmid, (void *)0, 0);
 	// if((int)ptr < 0) {
 	// 	printf(1, "Fail\n");
