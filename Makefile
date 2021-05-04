@@ -288,5 +288,4 @@ tar:
 
 .PHONY: dist-test dist
 
-run: 
-	make clean && make qemu < testShared.txt
+run: qemu
