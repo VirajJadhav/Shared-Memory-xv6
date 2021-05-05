@@ -683,7 +683,6 @@ shmat(int shmid, void* shmaddr, int shmflag) {
         size = process->pages[idx].size;
         release(&shmTable.lock);
         if(shmdt((void*)segment) == -1) {
-          release(&shmTable.lock);
           return (void*)-1;
         }
         acquire(&shmTable.lock);        
